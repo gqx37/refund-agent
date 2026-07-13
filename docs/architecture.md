@@ -23,9 +23,10 @@ code's, never the graph's; facts are the graph's, never the policy's.
 1. `evaluate_policy` → approve (policy-clean), or
 2. `escalate` → a human approved.
 
-There is no path from the LLM to `execute_refund`. The model is never given the
-`StripeClient`; only the deterministic node calls `create_refund`, after checking
-the decision. Asserted in `tests/test_agent.py`.
+There is no path from the LLM to `execute_refund`. The agent's tools
+(`charge_lookup`, `issue_refund`) are real LangChain tools, but they are invoked by
+the graph, never bound to the model; only the deterministic node calls
+`issue_refund`, after checking the decision. Asserted in `tests/test_agent.py`.
 
 ## Fixed lookups vs Text2Cypher
 

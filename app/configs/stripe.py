@@ -11,7 +11,6 @@ class StripeConfig(BaseSettings):
 
     api_key: str = Field(..., description="Stripe secret (restricted) key.")
     api_base: str = "https://api.stripe.com"
-    # Pin the version so a Stripe-side upgrade can't reshape responses on their
-    # schedule instead of ours. Blank => account default.
+    # Pin the version  
     api_version: Optional[str] = None
     timeout_seconds: float = 30.0

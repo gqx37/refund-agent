@@ -14,11 +14,12 @@ intake ──▶ gather_facts ──▶ evaluate_policy ──┬─ approve ─
 |---|---|---|
 | Guardrails | whether a refund is allowed | `app/policy.py` (pure function) |
 | Facts | customer, order, linked accounts | Neo4j (`app/integrations/graph.py`) |
-| Money | the charge and the refund | Stripe (`app/integrations/stripe.py`) |
+| Tools | look up a charge, issue a refund | `app/integrations/stripe/tools.py` |
 | Reasoning | extract intent, phrase the reply | Nemotron 3 Ultra on Fireworks |
 
-`execute_refund` is only reachable from an `approve` decision (policy-clean or a
-human's approval). The LLM is never given the Stripe client.
+The agent's tools are `charge_lookup` and `issue_refund`. The graph invokes them;
+the LLM is never bound to them, so `issue_refund` runs only after an `approve`
+decision (policy-clean or a human's approval).
 
 ## Run the tests, no keys
 
@@ -59,8 +60,10 @@ curl -sX POST localhost:8080/v1/refund-requests/req_123/resolve \
   not in the graph. See `docs/architecture.md` and `docs/design-note-neo4j-vs-code.md`.
 - **Escalation is a LangGraph interrupt/resume**: the run pauses and the same run
   resumes once a reviewer answers.
-- **No LLM on the money path**: `RefundAgent` gives the model two jobs (fill intake
-  gaps, phrase the reply) and never binds it to the Stripe client.
+- **Tools are visible but code-orchestrated**: `charge_lookup` / `issue_refund` are
+  real LangChain tools, but the graph calls them deterministically rather than
+  letting the model choose — a refund flow always needs the same facts, so there's
+  no LLM nondeterminism to buy. The model is never bound to `issue_refund`.
 
 ## Layout
 
@@ -72,7 +75,7 @@ app/
   main.py             FastAPI (health split + endpoints)
   configs/            one settings class per file
   integrations/
-    stripe.py         schemas + StripeClient (retrieve_charge, create_refund)
+    stripe/           schemas.py · client.py · tools.py (charge_lookup, issue_refund)
     graph.py          GraphStore (Neo4j, read-only parameterized Cypher)
   sample_data.py      the seed/test dataset
 scripts/seed_graph.py

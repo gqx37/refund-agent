@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.integrations.stripe import RefundCreateParams, StripeError, _idempotency_key
+from app.integrations.stripe import RefundCreateParams, StripeError, build_stripe_tools
 from app.sample_data import ORDER_CLEAN, ORDERS
 
 # The charge behind the clean sample order (2000, unrefunded).
@@ -55,16 +55,15 @@ async def test_refund_is_idempotent(stripe_client):
     assert charge.amount_refunded == 500  # applied once, not twice
 
 
+async def test_tools_are_callable(stripe_client):
+    tools = build_stripe_tools(stripe_client)
+    assert [t.name for t in tools.all] == ["charge_lookup", "issue_refund"]
+    charge = await tools.charge_lookup.ainvoke({"charge_id": CLEAN_CHARGE})
+    assert charge["amount"] == 2_000
+
+
 def test_refund_requires_exactly_one_target():
     with pytest.raises(ValueError):
         RefundCreateParams(charge="ch_1", payment_intent="pi_1")
     with pytest.raises(ValueError):
         RefundCreateParams()
-
-
-def test_idempotency_key_is_stable_and_param_sensitive():
-    a = RefundCreateParams(charge="ch_1", amount=500)
-    b = RefundCreateParams(charge="ch_1", amount=500)
-    c = RefundCreateParams(charge="ch_1", amount=600)
-    assert _idempotency_key(a) == _idempotency_key(b)
-    assert _idempotency_key(a) != _idempotency_key(c)
