@@ -8,17 +8,30 @@ import uuid
 
 from app.agent.factory import build_demo_service, build_production_service
 from app.agent.service import RefundAgentService, RefundOutcome
+from app.demo import (
+    ORDER_CLEAN,
+    ORDER_DISPUTED,
+    ORDER_FRAUD_RING,
+    ORDER_FULLY_REFUNDED,
+    ORDER_HIGH_VALUE,
+    ORDER_OUT_OF_WINDOW,
+    ORDER_PARTIALLY_REFUNDED,
+    ORDER_SERIAL_REFUNDER,
+)
 from app.domain import RefundRequest
 
-# (order_id, message, human_resolution) — resolution auto-answers escalations.
-_DEMO_SCENARIOS: list[tuple[str, str, bool | None]] = [
-    ("order_alice_ok", "Please refund my order, it arrived damaged.", None),
-    ("order_alice_old", "I'd like a refund on this old order.", None),
-    ("order_alice_disputed", "Refund me please.", None),
-    ("order_alice_done", "Can I get refunded?", None),
-    ("order_alice_big", "This was a mistake, please refund the full amount.", True),
-    ("order_bob", "Refund please, didn't like it.", False),
-    ("order_carol", "Please refund my purchase.", False),
+# (order_id, message, requested_amount_cents, human_resolution).
+_DEMO_SCENARIOS: list[tuple[str, str, int | None, bool | None]] = [
+    (ORDER_CLEAN, "Please refund my order, it arrived damaged.", None, None),
+    (ORDER_OUT_OF_WINDOW, "I'd like a refund on this old order.", None, None),
+    (ORDER_DISPUTED, "Refund me please.", None, None),
+    (ORDER_FULLY_REFUNDED, "Can I get refunded?", None, None),
+    # Charged 4000, 1500 already refunded: the customer asks for 2500, and gets
+    # exactly the remaining balance, not the original total.
+    (ORDER_PARTIALLY_REFUNDED, "I was told I'm still owed 25 dollars back.", 2_500, None),
+    (ORDER_HIGH_VALUE, "This was a mistake, please refund the full amount.", None, True),
+    (ORDER_SERIAL_REFUNDER, "Refund please, didn't like it.", None, False),
+    (ORDER_FRAUD_RING, "Please refund my purchase.", None, False),
 ]
 
 
@@ -39,8 +52,13 @@ async def _run_demo() -> None:
     service: RefundAgentService = built.service
     print("Running demo scenarios on stubs (no keys)\n")
     try:
-        for order_id, message, resolution in _DEMO_SCENARIOS:
-            request = RefundRequest(request_id=f"req_{order_id}", order_id=order_id, customer_message=message)
+        for order_id, message, amount, resolution in _DEMO_SCENARIOS:
+            request = RefundRequest(
+                request_id=f"req_{order_id}",
+                order_id=order_id,
+                customer_message=message,
+                requested_amount_cents=amount,
+            )
             outcome = await service.submit(request)
             _print(outcome)
             if outcome.status == "escalated" and resolution is not None:

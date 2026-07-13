@@ -40,7 +40,7 @@ refund-agent serve
 
 ```bash
 curl -sX POST localhost:8080/v1/refund-requests -H 'content-type: application/json' \
-  -d '{"order_id":"order_alice_ok","customer_message":"arrived broken, refund please"}'
+  -d '{"order_id":"SO-10432","customer_message":"arrived broken, refund please"}'
 
 curl -sX POST localhost:8080/v1/refund-requests/req_123/resolve \
   -H 'content-type: application/json' -d '{"approve":true}'

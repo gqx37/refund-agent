@@ -1,5 +1,8 @@
 # Demo dataset shared by the Neo4j seed, the in-memory stubs, and the tests.
 # purchased_days_ago is resolved relative to "now" when read.
+#
+# IDs look like real Stripe/merchant IDs; the scenario constants below give the
+# tests and CLI readable names for them.
 
 from __future__ import annotations
 
@@ -14,7 +17,7 @@ class DemoOrder:
     purchased_days_ago: int
     total_cents: int
     currency: str
-    refunded: bool  # historical flag, used only for customer risk scoring
+    refunded: bool  # historical flag, for customer risk scoring only
 
 
 @dataclass(frozen=True)
@@ -29,44 +32,58 @@ class DemoCharge:
 
 @dataclass(frozen=True)
 class DemoLink:
-    """A payment method shared across accounts (the linked-account edge)."""
-
     fingerprint: str
     customer_ids: tuple[str, ...]
 
 
-# --- Orders (drive the graph: customers, orders, transactions) ---------------
+# Customers (opaque, like Stripe's).
+_ALICE = "cus_QiT9fT2Ldm"  # clean history
+_BOB = "cus_7Rk2Np4Xa9"  # serial refunder
+_CAROL = "cus_Nc0Ht3ZbqP"  # looks clean alone
+_DAVE = "cus_Ke5Ub8Wme2"  # shares a card with Carol, refunds heavily
+
+# Scenario order numbers (merchant-defined), named for the tests/CLI.
+ORDER_CLEAN = "SO-10432"
+ORDER_OUT_OF_WINDOW = "SO-10318"
+ORDER_DISPUTED = "SO-10377"
+ORDER_FULLY_REFUNDED = "SO-10329"
+ORDER_HIGH_VALUE = "SO-10440"
+ORDER_PARTIALLY_REFUNDED = "SO-10448"
+ORDER_SERIAL_REFUNDER = "SO-10401"
+ORDER_FRAUD_RING = "SO-10455"
+
 ORDERS: list[DemoOrder] = [
-    # Alice: clean customer (4 orders, 1 historical refund => 25% refund rate).
-    DemoOrder("order_alice_ok", "cus_alice", "ch_alice_ok", 3, 2_000, "usd", refunded=False),
-    DemoOrder("order_alice_old", "cus_alice", "ch_alice_old", 90, 2_000, "usd", refunded=False),
-    DemoOrder("order_alice_disputed", "cus_alice", "ch_alice_disputed", 5, 2_000, "usd", refunded=False),
-    DemoOrder("order_alice_done", "cus_alice", "ch_alice_done", 4, 2_000, "usd", refunded=True),
-    DemoOrder("order_alice_big", "cus_alice", "ch_alice_big", 2, 60_000, "usd", refunded=False),
-    # Bob: serial refunder (4 orders, 3 historical refunds => 75% refund rate).
-    DemoOrder("order_bob", "cus_bob", "ch_bob", 2, 5_000, "usd", refunded=False),
-    DemoOrder("order_bob_r1", "cus_bob", "ch_bob_r1", 40, 5_000, "usd", refunded=True),
-    DemoOrder("order_bob_r2", "cus_bob", "ch_bob_r2", 50, 5_000, "usd", refunded=True),
-    DemoOrder("order_bob_r3", "cus_bob", "ch_bob_r3", 60, 5_000, "usd", refunded=True),
-    # Carol + Dave: fraud ring linked by a shared card. Carol looks clean alone,
-    # but Dave's accounts refund heavily => linked-account signal fires on Carol.
-    DemoOrder("order_carol", "cus_carol", "ch_carol", 1, 3_000, "usd", refunded=False),
-    DemoOrder("order_dave_r1", "cus_dave", "ch_dave_r1", 10, 3_000, "usd", refunded=True),
-    DemoOrder("order_dave_r2", "cus_dave", "ch_dave_r2", 20, 3_000, "usd", refunded=True),
+    # Alice: clean (2 of 6 orders historically refunded => 33%).
+    DemoOrder(ORDER_CLEAN, _ALICE, "ch_3PqR7aLZ2kFdE1nY8xVtBcM", 3, 2_000, "usd", refunded=False),
+    DemoOrder(ORDER_OUT_OF_WINDOW, _ALICE, "ch_3PqR7aLZ2kFdE1nY0jHsKpQ", 90, 2_000, "usd", refunded=False),
+    DemoOrder(ORDER_DISPUTED, _ALICE, "ch_3PqR7aLZ2kFdE1nY4wDgRuT", 5, 2_000, "usd", refunded=False),
+    DemoOrder(ORDER_FULLY_REFUNDED, _ALICE, "ch_3PqR7aLZ2kFdE1nY6bNmXe2", 4, 2_000, "usd", refunded=True),
+    DemoOrder(ORDER_HIGH_VALUE, _ALICE, "ch_3PqR7aLZ2kFdE1nY9cVpLo5", 2, 60_000, "usd", refunded=False),
+    # Partially refunded already: 4000 charged, 1500 refunded => 2500 left.
+    DemoOrder(ORDER_PARTIALLY_REFUNDED, _ALICE, "ch_3PqR7aLZ2kFdE1nYqZ7yWs3", 6, 4_000, "usd", refunded=True),
+    # Bob: 3 of 4 orders historically refunded => 75%.
+    DemoOrder(ORDER_SERIAL_REFUNDER, _BOB, "ch_3PqR7aLZ2kFdE1nY2tGhFa8", 2, 5_000, "usd", refunded=False),
+    DemoOrder("SO-10233", _BOB, "ch_bob_hist_1", 40, 5_000, "usd", refunded=True),
+    DemoOrder("SO-10251", _BOB, "ch_bob_hist_2", 50, 5_000, "usd", refunded=True),
+    DemoOrder("SO-10262", _BOB, "ch_bob_hist_3", 60, 5_000, "usd", refunded=True),
+    # Carol + Dave: linked by a shared card; Dave's accounts refund heavily.
+    DemoOrder(ORDER_FRAUD_RING, _CAROL, "ch_3PqR7aLZ2kFdE1nY5rKjDn4", 1, 3_000, "usd", refunded=False),
+    DemoOrder("SO-10188", _DAVE, "ch_dave_hist_1", 10, 3_000, "usd", refunded=True),
+    DemoOrder("SO-10195", _DAVE, "ch_dave_hist_2", 20, 3_000, "usd", refunded=True),
 ]
 
-# --- Charges (money state, served by the Stripe stub) ------------------------
+# Charges served by the Stripe stub (only the scenarios that get retrieved).
 CHARGES: dict[str, DemoCharge] = {
-    "ch_alice_ok": DemoCharge("ch_alice_ok", 2_000, 0, False, "succeeded", "cus_alice"),
-    "ch_alice_old": DemoCharge("ch_alice_old", 2_000, 0, False, "succeeded", "cus_alice"),
-    "ch_alice_disputed": DemoCharge("ch_alice_disputed", 2_000, 0, True, "succeeded", "cus_alice"),
-    "ch_alice_done": DemoCharge("ch_alice_done", 2_000, 2_000, False, "succeeded", "cus_alice"),
-    "ch_alice_big": DemoCharge("ch_alice_big", 60_000, 0, False, "succeeded", "cus_alice"),
-    "ch_bob": DemoCharge("ch_bob", 5_000, 0, False, "succeeded", "cus_bob"),
-    "ch_carol": DemoCharge("ch_carol", 3_000, 0, False, "succeeded", "cus_carol"),
+    "ch_3PqR7aLZ2kFdE1nY8xVtBcM": DemoCharge("ch_3PqR7aLZ2kFdE1nY8xVtBcM", 2_000, 0, False, "succeeded", _ALICE),
+    "ch_3PqR7aLZ2kFdE1nY0jHsKpQ": DemoCharge("ch_3PqR7aLZ2kFdE1nY0jHsKpQ", 2_000, 0, False, "succeeded", _ALICE),
+    "ch_3PqR7aLZ2kFdE1nY4wDgRuT": DemoCharge("ch_3PqR7aLZ2kFdE1nY4wDgRuT", 2_000, 0, True, "succeeded", _ALICE),
+    "ch_3PqR7aLZ2kFdE1nY6bNmXe2": DemoCharge("ch_3PqR7aLZ2kFdE1nY6bNmXe2", 2_000, 2_000, False, "succeeded", _ALICE),
+    "ch_3PqR7aLZ2kFdE1nY9cVpLo5": DemoCharge("ch_3PqR7aLZ2kFdE1nY9cVpLo5", 60_000, 0, False, "succeeded", _ALICE),
+    "ch_3PqR7aLZ2kFdE1nYqZ7yWs3": DemoCharge("ch_3PqR7aLZ2kFdE1nYqZ7yWs3", 4_000, 1_500, False, "succeeded", _ALICE),
+    "ch_3PqR7aLZ2kFdE1nY2tGhFa8": DemoCharge("ch_3PqR7aLZ2kFdE1nY2tGhFa8", 5_000, 0, False, "succeeded", _BOB),
+    "ch_3PqR7aLZ2kFdE1nY5rKjDn4": DemoCharge("ch_3PqR7aLZ2kFdE1nY5rKjDn4", 3_000, 0, False, "succeeded", _CAROL),
 }
 
-# --- Linked accounts (shared payment method) ---------------------------------
 LINKS: list[DemoLink] = [
-    DemoLink("pm_fingerprint_shared", ("cus_carol", "cus_dave")),
+    DemoLink("pm_1Nx8fingerprintAbc", (_CAROL, _DAVE)),
 ]
