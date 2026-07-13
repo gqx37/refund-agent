@@ -1,14 +1,4 @@
-# app/cli.py
-
-"""Command-line surface.
-
-    refund-agent demo                      run every demo scenario, no keys needed
-    refund-agent submit --order-id … …     run one request (demo mode by default)
-    refund-agent serve                     start the HTTP service
-
-`demo` and the default `submit` run entirely on stubs, so a reviewer can see the
-policy engine work without a Stripe/Neo4j/Fireworks key.
-"""
+# CLI: `refund-agent demo` (stubs, no keys) · `submit` · `serve`.
 
 from __future__ import annotations
 
@@ -20,9 +10,7 @@ from app.agent.factory import build_demo_service, build_production_service
 from app.agent.service import RefundAgentService, RefundOutcome
 from app.domain import RefundRequest
 
-
-# (order_id, customer_message, human_resolution_or_None) — the resolution is used
-# to auto-answer escalations so the demo shows the full round trip.
+# (order_id, message, human_resolution) — resolution auto-answers escalations.
 _DEMO_SCENARIOS: list[tuple[str, str, bool | None]] = [
     ("order_alice_ok", "Please refund my order, it arrived damaged.", None),
     ("order_alice_old", "I'd like a refund on this old order.", None),
@@ -52,9 +40,7 @@ async def _run_demo() -> None:
     print("Running demo scenarios on stubs (no keys)\n")
     try:
         for order_id, message, resolution in _DEMO_SCENARIOS:
-            request = RefundRequest(
-                request_id=f"req_{order_id}", order_id=order_id, customer_message=message
-            )
+            request = RefundRequest(request_id=f"req_{order_id}", order_id=order_id, customer_message=message)
             outcome = await service.submit(request)
             _print(outcome)
             if outcome.status == "escalated" and resolution is not None:
@@ -75,8 +61,7 @@ async def _run_submit(args: argparse.Namespace) -> None:
             requested_amount_cents=args.amount,
             customer_message=args.message,
         )
-        outcome = await built.service.submit(request)
-        _print(outcome)
+        _print(await built.service.submit(request))
     finally:
         await built.aclose()
 
@@ -89,7 +74,7 @@ def main() -> None:
 
     submit = sub.add_parser("submit", help="Run a single refund request.")
     submit.add_argument("--order-id", required=True, dest="order_id")
-    submit.add_argument("--message", default="", help="Customer message.")
+    submit.add_argument("--message", default="")
     submit.add_argument("--amount", type=int, default=None, help="Partial amount in cents.")
     submit.add_argument("--request-id", default=None, dest="request_id")
     submit.add_argument("--live", action="store_true", help="Use real Stripe/Neo4j/Fireworks.")
@@ -97,7 +82,6 @@ def main() -> None:
     sub.add_parser("serve", help="Start the HTTP service.")
 
     args = parser.parse_args()
-
     if args.command == "demo":
         asyncio.run(_run_demo())
     elif args.command == "submit":

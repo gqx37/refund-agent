@@ -1,13 +1,5 @@
-# app/integrations/graph/seed.py
-
-"""Seed the semantic graph with the canonical demo dataset.
-
-Idempotent: everything is MERGE, and the whole thing is a pure function of
-app/demo.py, so re-running it after editing the fixtures converges the graph
-rather than duplicating nodes.
-
-    python -m app.integrations.graph.seed        # uses NEO4J_* from the env / .env
-"""
+# Seed the graph with the demo dataset. Idempotent (all MERGE, a pure function of
+# app/demo.py). Run: python -m app.integrations.graph.seed
 
 from __future__ import annotations
 
@@ -29,10 +21,8 @@ _CONSTRAINTS = [
 _UPSERT_ORDER = """
 MERGE (c:Customer {id: $customer_id})
 MERGE (o:Order {id: $order_id})
-  SET o.total_cents = $total_cents,
-      o.currency = $currency,
-      o.purchased_at = $purchased_at,
-      o.refunded = $refunded
+  SET o.total_cents = $total_cents, o.currency = $currency,
+      o.purchased_at = $purchased_at, o.refunded = $refunded
 MERGE (t:Transaction {id: $charge_id})
 MERGE (c)-[:PLACED]->(o)
 MERGE (o)-[:PAID_WITH]->(t)
@@ -54,9 +44,7 @@ async def seed() -> None:
     try:
         for constraint in _CONSTRAINTS:
             await driver.execute_query(constraint, database_=config.database)
-
         for order in ORDERS:
-            purchased_at = (now - timedelta(days=order.purchased_days_ago)).isoformat()
             await driver.execute_query(
                 _UPSERT_ORDER,
                 parameters_={
@@ -65,12 +53,11 @@ async def seed() -> None:
                     "charge_id": order.charge_id,
                     "total_cents": order.total_cents,
                     "currency": order.currency,
-                    "purchased_at": purchased_at,
+                    "purchased_at": (now - timedelta(days=order.purchased_days_ago)).isoformat(),
                     "refunded": order.refunded,
                 },
                 database_=config.database,
             )
-
         for link in LINKS:
             await driver.execute_query(
                 _UPSERT_LINK,

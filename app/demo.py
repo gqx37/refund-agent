@@ -1,16 +1,5 @@
-# app/demo.py
-
-"""Canonical demo dataset — one source of truth for three consumers.
-
-The Neo4j seed script writes it into a real graph, the in-memory stubs serve it
-in tests, and the README walks through it. Because all three read the same
-fixtures, the scenarios a reviewer runs locally are exactly the ones the test
-suite asserts on.
-
-Each scenario is engineered to trip a specific policy branch. `purchased_days_ago`
-is resolved to a timestamp relative to "now" whenever it's read, so "3 days ago"
-stays 3 days ago no matter when you run it.
-"""
+# Demo dataset shared by the Neo4j seed, the in-memory stubs, and the tests.
+# purchased_days_ago is resolved relative to "now" when read.
 
 from __future__ import annotations
 

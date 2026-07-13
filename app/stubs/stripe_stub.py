@@ -1,16 +1,5 @@
-# app/stubs/stripe_stub.py
-
-"""A stateful fake Stripe served over an httpx.MockTransport.
-
-This is the seam that makes the agent testable end-to-end without a key: hand the
-StripeClient this transport and every request is answered from in-memory demo
-state. It mirrors the real wire contract closely enough to be worth trusting:
-  - GET /v1/charges/{id} returns a Charge object.
-  - POST /v1/refunds validates the amount, mutates amount_refunded, returns a Refund.
-  - 4xx errors use Stripe's {"error": {...}} envelope.
-  - Idempotency-Key is honored: replaying a key replays the stored response, so a
-    retry can't double-refund — the same guarantee the real API gives.
-"""
+# Stateful fake Stripe over an httpx.MockTransport. Answers charge retrieval and
+# refund creation from in-memory state, honoring Idempotency-Key.
 
 from __future__ import annotations
 
@@ -36,10 +25,7 @@ class _ChargeState(TypedDict):
 
 
 class FakeStripe:
-    """Holds mutable charge state + an idempotency cache, exposes a MockTransport."""
-
     def __init__(self) -> None:
-        # Deep-ish copy so mutations don't leak across test cases.
         self._charges: dict[str, _ChargeState] = {
             cid: _ChargeState(
                 amount=c.amount_cents,
@@ -57,8 +43,6 @@ class FakeStripe:
     @property
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self._handle)
-
-    # --- request routing -----------------------------------------------------
 
     def _handle(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
@@ -100,7 +84,6 @@ class FakeStripe:
                 self._idempotency[idem] = (resp.status_code, json.loads(resp.content))
             return resp
 
-        # Apply the refund to fake money state.
         charge["amount_refunded"] += amount
         body = {
             "id": f"re_{uuid.uuid4().hex[:24]}",
@@ -109,9 +92,7 @@ class FakeStripe:
             "charge": charge_id,
             "currency": charge["currency"],
             "created": int(time.time()),
-            "payment_intent": None,
             "reason": form.get("reason"),
-            "receipt_number": None,
             "status": "succeeded",
         }
         if idem:
@@ -124,17 +105,13 @@ class FakeStripe:
             "id": charge_id,
             "object": "charge",
             "amount": charge["amount"],
-            "amount_captured": charge["amount"],
             "amount_refunded": charge["amount_refunded"],
             "currency": charge["currency"],
             "created": charge["created"],
             "customer": charge["customer"],
-            "captured": True,
             "disputed": charge["disputed"],
-            "paid": True,
             "refunded": charge["amount_refunded"] >= charge["amount"],
             "status": charge["status"],
-            "payment_intent": None,
         }
 
 

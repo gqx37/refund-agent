@@ -1,11 +1,4 @@
-# app/agent/factory.py
-
-"""Composition roots. Two ways to build the service:
-
-  - production: real Stripe (httpx), real Neo4j, real Nemotron on Fireworks.
-  - demo: the in-memory stubs + a fake Stripe transport + no LLM, so anyone can
-    run the full agent end-to-end with zero keys and zero infra.
-"""
+# Composition roots: production (real Stripe/Neo4j/Fireworks) and demo (stubs, no keys).
 
 from __future__ import annotations
 
@@ -31,7 +24,7 @@ class _Closeable(Protocol):
 @dataclass
 class BuiltService:
     service: RefundAgentService
-    resources: list[_Closeable]  # closed on shutdown
+    resources: list[_Closeable]
 
     async def aclose(self) -> None:
         for resource in self.resources:
@@ -41,21 +34,17 @@ class BuiltService:
 def build_production_service(policy: RefundPolicy | None = None) -> BuiltService:
     stripe_client = StripeClient(StripeConfig())
     fact_store = Neo4jFactStore(Neo4jConfig())
-    llm = build_llm(LLMConfig())
     deps = RefundAgentDeps(
         fact_store=fact_store,
         stripe_tools=build_stripe_tools(stripe_client),
         policy=policy or RefundPolicy(),
-        llm=llm,
+        llm=build_llm(LLMConfig()),
     )
-    return BuiltService(service=RefundAgentService(deps), resources=[stripe_client, fact_store])
+    return BuiltService(RefundAgentService(deps), [stripe_client, fact_store])
 
 
 def build_demo_service(policy: RefundPolicy | None = None) -> BuiltService:
-    """No keys, no infra: in-memory graph + fake Stripe transport, no LLM."""
-    stripe_client = StripeClient(
-        StripeConfig(api_key="sk_test_stub"), transport=FakeStripe().transport
-    )
+    stripe_client = StripeClient(StripeConfig(api_key="sk_test_stub"), transport=FakeStripe().transport)
     fact_store = InMemoryFactStore()
     deps = RefundAgentDeps(
         fact_store=fact_store,
@@ -63,4 +52,4 @@ def build_demo_service(policy: RefundPolicy | None = None) -> BuiltService:
         policy=policy or RefundPolicy(),
         llm=None,
     )
-    return BuiltService(service=RefundAgentService(deps), resources=[stripe_client, fact_store])
+    return BuiltService(RefundAgentService(deps), [stripe_client, fact_store])

@@ -11,8 +11,8 @@ from __future__ import annotations
 import pytest
 
 from app.integrations.stripe.client import StripeError
+from app.integrations.stripe.schemas import RefundCreateParams
 from app.integrations.stripe.tools import _idempotency_key
-from app.integrations.stripe.types.refund.actions import RefundCreateParams
 
 
 async def test_charge_retrieve_returns_typed_fields(stripe_tools):
