@@ -1,8 +1,6 @@
-# Demo dataset shared by the Neo4j seed, the in-memory stubs, and the tests.
-# purchased_days_ago is resolved relative to "now" when read.
-#
-# IDs look like real Stripe/merchant IDs; the scenario constants below give the
-# tests and CLI readable names for them.
+# Sample dataset shared by the Neo4j seed script and the tests. purchased_days_ago
+# is resolved relative to "now" when read. IDs look like real Stripe/merchant IDs;
+# the scenario constants below give the tests readable names for them.
 
 from __future__ import annotations
 

@@ -1,16 +1,10 @@
-# tests/test_policy.py
-
-"""Exhaustive unit tests for the policy gate — the point of making it a pure
-function. No stubs needed here; we build facts directly and assert the outcome
-and the decisive rule_id."""
+# Unit tests for the policy gate — a pure function, so we build facts directly.
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-
-from app.agent.policy import RefundPolicy, evaluate
-from app.domain import (
+from app.models import (
     ChargeFacts,
     CustomerRiskFacts,
     Outcome,
@@ -18,6 +12,7 @@ from app.domain import (
     RefundFacts,
     RefundRequest,
 )
+from app.policy import RefundPolicy, evaluate
 
 NOW = datetime(2026, 7, 13, tzinfo=timezone.utc)
 POLICY = RefundPolicy()

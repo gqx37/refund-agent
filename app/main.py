@@ -11,12 +11,11 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Response, status
 from pydantic import BaseModel, Field
 
-from app.agent.factory import build_production_service
-from app.agent.service import RefundOutcome
-from app.config import app_config
-from app.domain import RefundRequest
-from app.integrations.stripe.schemas import RefundReason
+from app.agent import RefundAgent
+from app.configs import runtime_config
+from app.integrations.stripe import RefundReason
 from app.logging import configure, get_logger
+from app.models import RefundOutcome, RefundRequest
 
 load_dotenv()
 log = get_logger()
@@ -24,17 +23,14 @@ log = get_logger()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    cfg = app_config()
+    cfg = runtime_config()
     configure(is_production=cfg.is_production)
-    built = build_production_service()
-    app.state.built = built
-    app.state.service = built.service
-    app.state.fact_store = built.resources[-1]
+    app.state.agent = RefundAgent.production()
     log.info("startup", env=cfg.env)
     try:
         yield
     finally:
-        await built.aclose()
+        await app.state.agent.aclose()
 
 
 app = FastAPI(title="refund-agent", version="0.1.0", lifespan=lifespan)
@@ -61,7 +57,7 @@ async def health_liveness() -> dict:
 @app.get("/health/ready", include_in_schema=False)
 async def health_readiness(response: Response) -> dict:
     try:
-        await app.state.fact_store.verify()
+        await app.state.agent.verify()
         return {"status": "ok"}
     except Exception as exc:  # noqa: BLE001 - readiness reports, doesn't raise
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
@@ -77,7 +73,7 @@ async def submit_refund_request(body: SubmitBody) -> RefundOutcome:
         requested_amount_cents=body.requested_amount_cents,
         customer_message=body.customer_message,
     )
-    outcome = await app.state.service.submit(request)
+    outcome = await app.state.agent.submit(request)
     log.info("refund_request", request_id=outcome.request_id, status=outcome.status,
              rule_id=outcome.decision.rule_id if outcome.decision else None)
     return outcome
@@ -85,7 +81,7 @@ async def submit_refund_request(body: SubmitBody) -> RefundOutcome:
 
 @app.post("/v1/refund-requests/{request_id}/resolve", response_model=RefundOutcome)
 async def resolve_refund_request(request_id: str, body: ResolveBody) -> RefundOutcome:
-    outcome = await app.state.service.resolve(request_id, approve=body.approve, note=body.note)
+    outcome = await app.state.agent.resolve(request_id, approve=body.approve, note=body.note)
     log.info("refund_resolve", request_id=request_id, approve=body.approve, status=outcome.status)
     return outcome
 
@@ -93,4 +89,4 @@ async def resolve_refund_request(request_id: str, body: ResolveBody) -> RefundOu
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=app_config().port)
+    uvicorn.run(app, host="0.0.0.0", port=runtime_config().port)

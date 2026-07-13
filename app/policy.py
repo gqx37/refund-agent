@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
-from app.domain import Outcome, PolicyDecision, RefundFacts, RefundRequest
+from app.models import Outcome, PolicyDecision, RefundFacts, RefundRequest
 
 
 @dataclass(frozen=True)

@@ -35,9 +35,6 @@ dev = [
     "mypy>=1.11.0",
 ]
 
-[project.scripts]
-refund-agent = "app.cli:main"
-
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
 

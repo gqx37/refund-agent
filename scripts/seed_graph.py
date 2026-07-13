@@ -1,5 +1,5 @@
-# Seed the graph with the demo dataset. Idempotent (all MERGE, a pure function of
-# app/demo.py). Run: python -m app.integrations.graph.seed
+# Seed the graph with the sample dataset. Idempotent (all MERGE, a pure function
+# of app/sample_data.py). Run from the repo root: python -m scripts.seed_graph
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from datetime import datetime, timedelta, timezone
 
 from neo4j import AsyncGraphDatabase
 
-from app.config import Neo4jConfig
-from app.demo import LINKS, ORDERS
+from app.configs import Neo4jConfig
+from app.sample_data import LINKS, ORDERS
 
 _CONSTRAINTS = [
     "CREATE CONSTRAINT customer_id IF NOT EXISTS FOR (c:Customer) REQUIRE c.id IS UNIQUE",

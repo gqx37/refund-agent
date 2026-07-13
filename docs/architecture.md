@@ -4,7 +4,7 @@
 
 Four concerns, kept separate:
 
-- **Guardrails** (`app/agent/policy.py`): whether a refund is allowed. A pure
+- **Guardrails** (`app/policy.py`): whether a refund is allowed. A pure
   function of `(request, facts, policy)` — no I/O, no LLM, no clock except the one
   passed in — so it's fully unit-testable and its verdict is reproducible.
 - **Facts** (Neo4j): who the customer is, what they ordered, which charge paid for
@@ -23,17 +23,16 @@ code's, never the graph's; facts are the graph's, never the policy's.
 1. `evaluate_policy` → approve (policy-clean), or
 2. `escalate` → a human approved.
 
-There is no path from the LLM to `execute_refund`. The refund tool is built
-(`app/integrations/stripe/tools.py`) but never handed to the model; only the
-deterministic node invokes it, after checking the decision. Asserted in
-`tests/test_graph_flow.py`.
+There is no path from the LLM to `execute_refund`. The model is never given the
+`StripeClient`; only the deterministic node calls `create_refund`, after checking
+the decision. Asserted in `tests/test_agent.py`.
 
 ## Fixed lookups vs Text2Cypher
 
 The lookups the decision needs (order facts, customer risk) are parameterized
-Cypher in `app/integrations/graph/schema.py`. You don't ask an LLM to regenerate a
-query whose shape you already know — it adds latency, cost, and an injection
-surface for nothing. See `design-note-neo4j-vs-code.md`.
+Cypher in `app/integrations/graph.py`. You don't ask an LLM to regenerate a query
+whose shape you already know — it adds latency, cost, and an injection surface for
+nothing. See `design-note-neo4j-vs-code.md`.
 
 ## Human-in-the-loop
 
@@ -56,7 +55,7 @@ production).
 
 ## Testability
 
-The graph depends on a `FactStore` protocol and takes an injected Stripe transport
-and an optional LLM, so production wiring (Neo4j + httpx + Fireworks) and test
-wiring (in-memory graph + fake Stripe + no model) are the same graph. The whole
-agent runs in CI with no keys and no database.
+`RefundAgent` takes its fact store, Stripe client, and LLM as constructor args, so
+production wiring (Neo4j + httpx + Fireworks) and test wiring (in-memory graph +
+fake Stripe transport + no model) build the same agent. The whole thing runs in CI
+with no keys and no database.
