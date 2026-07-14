@@ -6,244 +6,285 @@
 <title>Refund Agent</title>
 <style>
   :root {
-    --bg: #f7f7f8; --panel: #ffffff; --ink: #1a1a1e; --muted: #6b6b76;
-    --line: #e6e6ea; --user: #e8eefc; --accent: #2f6df6;
-    --ok: #1c8a4b; --ok-bg: #e7f6ec; --deny: #c02626; --deny-bg: #fbe9e9;
-    --esc: #9a6400; --esc-bg: #fbf1dc;
+    --bg: #ffffff;
+    --ink: #16161a;
+    --muted: #8a8a94;
+    --bubble: #f4f4f5;
+    --bubble-user: #ececee;
+    --line: #ececee;
+    --accent: #2f6df6;
+    --ok: #12874a; --ok-bg: #eaf6ef;
+    --deny: #c33; --deny-bg: #fbecec;
+    --hold: #9a6a00; --hold-bg: #fbf2df;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 30px rgba(0,0,0,.05);
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #17171a; --panel: #1f1f24; --ink: #ececf1; --muted: #9a9aa6;
-      --line: #2c2c33; --user: #23324f; --accent: #5b8bff;
-      --ok: #57d38c; --ok-bg: #16311f; --deny: #ff8080; --deny-bg: #3a1c1c;
-      --esc: #e6b95a; --esc-bg: #35290f;
-    }
-  }
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+  html, body { height: 100%; }
   body {
     margin: 0; background: var(--bg); color: var(--ink);
-    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    display: flex; flex-direction: column; height: 100vh;
+    font: 15.5px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex; flex-direction: column;
   }
-  header {
-    padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel);
-    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  .topbar {
+    display: flex; align-items: center; gap: 9px; padding: 15px 20px;
+    position: sticky; top: 0; background: rgba(255,255,255,.85); backdrop-filter: blur(8px); z-index: 5;
   }
-  header h1 { font-size: 16px; margin: 0; font-weight: 650; }
-  header .sub { color: var(--muted); font-size: 13px; }
-  header .spacer { flex: 1; }
-  header button.reset {
-    font-size: 12px; color: var(--muted); background: none; border: 1px solid var(--line);
-    border-radius: 6px; padding: 4px 10px; cursor: pointer;
-  }
-  .chips { padding: 10px 20px 0; display: flex; gap: 8px; flex-wrap: wrap; }
-  .chips button {
-    font-size: 12.5px; background: var(--panel); color: var(--ink); border: 1px solid var(--line);
-    border-radius: 999px; padding: 5px 12px; cursor: pointer;
-  }
-  .chips button:hover { border-color: var(--accent); }
-  main { flex: 1; overflow-y: auto; padding: 16px 20px; }
-  .wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
-  .row { display: flex; }
-  .row.user { justify-content: flex-end; }
-  .bubble {
-    padding: 10px 14px; border-radius: 14px; max-width: 88%; white-space: pre-wrap; word-wrap: break-word;
-  }
-  .row.user .bubble { background: var(--user); border-bottom-right-radius: 4px; }
-  .row.agent .bubble { background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
-  .turn { display: flex; flex-direction: column; gap: 8px; max-width: 88%; }
+  .topbar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
+  .topbar h1 { font-size: 15px; font-weight: 640; margin: 0; letter-spacing: -.01em; }
+  .topbar .tag { font-size: 12.5px; color: var(--muted); }
+  .topbar .spacer { flex: 1; }
+  .topbar .reset { font-size: 12.5px; color: var(--muted); background: none; border: 0; cursor: pointer; padding: 4px; }
+  .topbar .reset:hover { color: var(--ink); }
 
-  .trace {
-    border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden;
-  }
-  .trace .hd {
-    font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted);
-    padding: 8px 12px; border-bottom: 1px solid var(--line);
-  }
-  .step { padding: 9px 12px; border-bottom: 1px solid var(--line); }
-  .step:last-child { border-bottom: 0; }
-  .step .call { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
-  .step .call b { font-weight: 650; }
-  .step .args { color: var(--muted); }
-  .step .result { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
-  .badge {
-    display: inline-block; font-size: 11px; font-weight: 650; padding: 1px 8px; border-radius: 999px;
-    margin-left: 8px; vertical-align: middle;
-  }
-  .badge.approve { color: var(--ok); background: var(--ok-bg); }
-  .badge.deny { color: var(--deny); background: var(--deny-bg); }
-  .badge.escalate { color: var(--esc); background: var(--esc-bg); }
+  main { flex: 1; overflow-y: auto; }
+  .thread { max-width: 720px; margin: 0 auto; padding: 8px 20px 24px; display: flex; flex-direction: column; gap: 18px; }
 
-  .review {
-    border: 1px solid var(--esc); background: var(--esc-bg); border-radius: 12px; padding: 12px 14px;
+  /* Empty state */
+  .empty { text-align: center; padding: 12vh 8px 0; color: var(--ink); }
+  .empty h2 { font-size: 22px; font-weight: 660; letter-spacing: -.02em; margin: 0 0 6px; }
+  .empty p { color: var(--muted); margin: 0 0 22px; }
+  .suggest { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .suggest button {
+    font-size: 13.5px; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 14px; cursor: pointer; transition: border-color .15s, transform .05s;
   }
-  .review h3 { margin: 0 0 6px; font-size: 13.5px; color: var(--esc); }
-  .review ul { margin: 6px 0 10px; padding-left: 18px; color: var(--ink); font-size: 13px; }
-  .review .actions { display: flex; gap: 8px; }
-  .review button {
-    font-size: 13.5px; font-weight: 600; border-radius: 8px; padding: 7px 16px; cursor: pointer; border: 0;
-  }
-  .review .approve { background: var(--ok); color: #fff; }
-  .review .deny { background: var(--deny); color: #fff; }
-  .review button:disabled { opacity: .5; cursor: default; }
+  .suggest button:hover { border-color: var(--accent); }
+  .suggest button:active { transform: translateY(1px); }
 
-  footer { border-top: 1px solid var(--line); background: var(--panel); padding: 12px 20px; }
-  .composer { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; }
-  .composer input {
-    flex: 1; padding: 11px 14px; border-radius: 10px; border: 1px solid var(--line);
-    background: var(--bg); color: var(--ink); font-size: 15px;
+  .msg { display: flex; flex-direction: column; gap: 8px; }
+  .msg.user { align-items: flex-end; }
+  .bubble { padding: 11px 15px; border-radius: 16px; max-width: 82%; white-space: pre-wrap; word-wrap: break-word; }
+  .msg.user .bubble { background: var(--bubble-user); border-bottom-right-radius: 6px; }
+  .msg.assistant { align-items: flex-start; }
+  .msg.assistant .body { max-width: 88%; display: flex; flex-direction: column; gap: 9px; }
+
+  /* Tool chips */
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink);
+    background: var(--bubble); border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px 5px 9px;
+    animation: pop .18s ease-out;
   }
-  .composer input:focus { outline: none; border-color: var(--accent); }
-  .composer button {
-    background: var(--accent); color: #fff; border: 0; border-radius: 10px; padding: 0 18px;
-    font-size: 15px; font-weight: 600; cursor: pointer;
+  .chip svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; opacity: .8; }
+  .chip.pending { color: var(--muted); }
+  .chip.pending .spin { width: 11px; height: 11px; border: 2px solid var(--line); border-top-color: var(--muted); border-radius: 50%; animation: spin .7s linear infinite; }
+  .chip.approve { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+  .chip.deny { color: var(--deny); background: var(--deny-bg); border-color: transparent; }
+  .chip.hold { color: var(--hold); background: var(--hold-bg); border-color: transparent; }
+  @keyframes pop { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: scale(1); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Assistant text + streaming shimmer */
+  .text { background: var(--bubble); padding: 12px 16px; border-radius: 16px; border-bottom-left-radius: 6px; white-space: pre-wrap; word-wrap: break-word; min-height: 6px; }
+  .text.hold { background: var(--hold-bg); }
+  .text.streaming {
+    background-image: linear-gradient(100deg, var(--ink) 30%, var(--muted) 50%, var(--ink) 70%);
+    background-size: 220% 100%; -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: transparent; animation: sweep 1.5s linear infinite;
   }
-  .composer button:disabled { opacity: .5; cursor: default; }
-  .dots span { animation: blink 1.2s infinite; }
-  .dots span:nth-child(2) { animation-delay: .2s; }
-  .dots span:nth-child(3) { animation-delay: .4s; }
-  @keyframes blink { 0%, 60%, 100% { opacity: .25; } 30% { opacity: 1; } }
+  @keyframes sweep { to { background-position: -220% 0; } }
+  .cursor { display: inline-block; width: 7px; height: 1.05em; vertical-align: -2px; background: var(--muted); border-radius: 2px; margin-left: 2px; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .meta { display: flex; gap: 4px; padding-left: 4px; opacity: 0; transition: opacity .15s; }
+  .msg.assistant:hover .meta { opacity: 1; }
+  .meta button { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); background: none; border: 0; cursor: pointer; padding: 3px 6px; border-radius: 7px; }
+  .meta button:hover { background: var(--bubble); color: var(--ink); }
+  .meta svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Composer */
+  footer { padding: 10px 20px calc(14px + env(safe-area-inset-bottom)); background: linear-gradient(to top, var(--bg) 68%, transparent); position: sticky; bottom: 0; }
+  .composer { max-width: 720px; margin: 0 auto; display: flex; align-items: flex-end; gap: 8px;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 22px; padding: 6px 6px 6px 16px; box-shadow: var(--shadow); }
+  .composer textarea {
+    flex: 1; border: 0; outline: 0; resize: none; background: none; color: var(--ink); font: inherit;
+    padding: 8px 0; max-height: 140px; line-height: 1.5;
+  }
+  .composer .send {
+    flex: none; width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--accent); color: #fff;
+    display: grid; place-items: center; cursor: pointer; transition: opacity .15s, transform .05s;
+  }
+  .composer .send:disabled { opacity: .3; cursor: default; }
+  .composer .send:not(:disabled):active { transform: scale(.94); }
+  .composer .send svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .hint { max-width: 720px; margin: 7px auto 0; text-align: center; font-size: 11.5px; color: var(--muted); }
 </style>
 </head>
 <body>
-  <header>
+  <div class="topbar">
+    <span class="dot"></span>
     <h1>Refund Agent</h1>
-    <span class="sub">policy guardrail on every refund &middot; real Stripe test mode</span>
+    <span class="tag">policy guardrail on every refund</span>
     <span class="spacer"></span>
     <button class="reset" onclick="resetChat()">New chat</button>
-  </header>
-  <div class="chips" id="chips"></div>
-  <main><div class="wrap" id="log"></div></main>
+  </div>
+
+  <main><div class="thread" id="thread"></div></main>
+
   <footer>
-    <form class="composer" id="composer" onsubmit="return send(event)">
-      <input id="input" autocomplete="off" placeholder="e.g. I'm Alice Nguyen, can you show my orders?" />
-      <button id="sendBtn" type="submit">Send</button>
+    <form class="composer" id="composer">
+      <textarea id="input" rows="1" placeholder="Ask about a refund..." autofocus></textarea>
+      <button class="send" id="send" type="submit" aria-label="Send" disabled>
+        <svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+      </button>
     </form>
+    <div class="hint">Real Stripe test mode &middot; refunds over policy limits ask for a typed <b>approve</b> / <b>deny</b></div>
   </footer>
 
 <script>
-const SAMPLES = [
+const SUGGEST = [
   "I'm Alice Nguyen, show my orders",
-  "refund SO-10432, it arrived broken",
-  "refund SO-10440 in full",
-  "refund SO-10329",
+  "Refund SO-10432, it arrived broken",
+  "Refund SO-10440 in full",
+  "Refund SO-10377",
 ];
-let threadId = null;
-let busy = false;
 
-const log = document.getElementById("log");
+const ICONS = {
+  find_customer: '<svg viewBox="0 0 24 24"><circle cx="10" cy="8" r="3.2"/><path d="M4.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17.5" cy="15.5" r="2.4"/><path d="M19.4 17.4 21.5 19.5"/></svg>',
+  list_orders:   '<svg viewBox="0 0 24 24"><path d="M8 6h11M8 12h11M8 18h11"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>',
+  order_lookup:  '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.2"/><path d="M20 20l-3.6-3.6M9 9h4M9 12h4"/></svg>',
+  issue_refund:  '<svg viewBox="0 0 24 24"><path d="M9 7H6a3 3 0 0 0-3 3v0a3 3 0 0 0 3 3h9a3 3 0 0 1 3 3v0a3 3 0 0 1-3 3h-3"/><path d="M12 4 9 7l3 3"/></svg>',
+};
+const LABELS = {
+  find_customer: "Finding your account",
+  list_orders:   "Pulling up orders",
+  order_lookup:  "Checking the order",
+  issue_refund:  "Processing refund",
+};
+const COPY_ICON = '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+const CHECK_ICON = '<svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10"/></svg>';
+
+let threadId = null, busy = false;
+const thread = document.getElementById("thread");
 const input = document.getElementById("input");
-const sendBtn = document.getElementById("sendBtn");
+const sendBtn = document.getElementById("send");
+const form = document.getElementById("composer");
 
-const chips = document.getElementById("chips");
-SAMPLES.forEach(s => {
-  const b = document.createElement("button");
-  b.textContent = s;
-  b.onclick = () => { if (!busy) { input.value = s; send(); } };
-  chips.appendChild(b);
-});
+function esc(s){ return (s??"").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+function el(html){ const t=document.createElement("template"); t.innerHTML=html.trim(); return t.content.firstChild; }
+function scroll(){ const m=document.querySelector("main"); m.scrollTop=m.scrollHeight; }
 
-function resetChat() { threadId = null; log.innerHTML = ""; input.focus(); }
-function esc(s) { return (s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
-function el(html) { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstChild; }
-function scroll() { document.querySelector("main").scrollTop = 1e9; }
+function renderEmpty(){
+  const wrap = el(`<div class="empty"><h2>How can I help with your refund?</h2>
+    <p>Look up an order or customer, then request a refund. Policy is checked on every one.</p>
+    <div class="suggest"></div></div>`);
+  const box = wrap.querySelector(".suggest");
+  SUGGEST.forEach(s => { const b=el(`<button>${esc(s)}</button>`); b.onclick=()=>{ input.value=s; submit(); }; box.appendChild(b); });
+  thread.appendChild(wrap);
+}
+function clearEmpty(){ const e=thread.querySelector(".empty"); if(e) e.remove(); }
+function resetChat(){ threadId=null; thread.innerHTML=""; renderEmpty(); input.focus(); }
 
-function addUser(text) {
-  log.appendChild(el(`<div class="row user"><div class="bubble">${esc(text)}</div></div>`));
+function addUser(text){
+  clearEmpty();
+  thread.appendChild(el(`<div class="msg user"><div class="bubble">${esc(text)}</div></div>`));
   scroll();
 }
 
-function fmtArgs(args) {
-  const parts = Object.entries(args || {})
-    .filter(([, v]) => v !== null && v !== undefined && v !== "")
-    .map(([k, v]) => `${k}=${esc(String(v))}`);
-  return parts.length ? `(${parts.join(", ")})` : "()";
-}
+// One assistant turn: chip row + streaming text + copy affordance.
+function newAssistant(){
+  const node = el(`<div class="msg assistant"><div class="body">
+      <div class="chips" hidden></div>
+      <div class="text streaming"><span class="cursor"></span></div>
+      <div class="meta" hidden></div>
+    </div></div>`);
+  thread.appendChild(node);
+  const chips = node.querySelector(".chips");
+  const text = node.querySelector(".text");
+  const meta = node.querySelector(".meta");
+  const toolEls = {};
+  let raw = "";
 
-function renderTrace(trace) {
-  if (!trace || !trace.length) return "";
-  const steps = trace.map(s => {
-    const badge = s.guardrail ? `<span class="badge ${s.guardrail}">guardrail: ${s.guardrail}</span>` : "";
-    const result = s.result ? `<div class="result">${esc(s.result)}</div>` : "";
-    return `<div class="step">
-      <div class="call"><b>${esc(s.name)}</b><span class="args">${fmtArgs(s.args)}</span>${badge}</div>
-      ${result}</div>`;
-  }).join("");
-  return `<div class="trace"><div class="hd">agent trace</div>${steps}</div>`;
-}
-
-function renderReview(review) {
-  const reasons = (review.policy_reasons || []).map(r => `<li>${esc(r)}</li>`).join("");
-  const amount = (review.amount_cents / 100).toFixed(2);
-  return `<div class="review">
-    <h3>Human review required &middot; $${amount} on ${esc(review.order_id)}</h3>
-    <ul>${reasons}</ul>
-    <div class="actions">
-      <button class="approve" onclick="resolve(true, this)">Approve refund</button>
-      <button class="deny" onclick="resolve(false, this)">Deny</button>
-    </div></div>`;
-}
-
-function addAgentTurn(data) {
-  const turn = el(`<div class="row agent"><div class="turn"></div></div>`);
-  const box = turn.querySelector(".turn");
-  const trace = renderTrace(data.trace);
-  if (trace) box.appendChild(el(trace));
-  if (data.status === "escalated") {
-    box.appendChild(el(renderReview(data.review)));
-  } else if (data.reply) {
-    box.appendChild(el(`<div class="bubble">${esc(data.reply)}</div>`));
+  function addTool(name){
+    chips.hidden = false;
+    const icon = ICONS[name] || "";
+    const chipEl = el(`<span class="chip pending" data-tool="${name}">${icon}<span class="lbl">${esc(LABELS[name]||name)}</span><span class="spin"></span></span>`);
+    chips.appendChild(chipEl);
+    (toolEls[name] = toolEls[name] || []).push(chipEl);
+    scroll();
   }
-  log.appendChild(turn);
-  scroll();
+  function finishTool(name, guardrail){
+    if(!name) return;
+    let list = toolEls[name];
+    if(!list || !list.length){ addTool(name); list = toolEls[name]; }  // result with no prior chip (resume turn)
+    const chipEl = list[list.length-1];
+    chipEl.querySelector(".spin")?.remove();
+    chipEl.classList.remove("pending");
+    if(name === "issue_refund"){
+      if(guardrail === "approve"){ chipEl.classList.add("approve"); chipEl.querySelector(".lbl").textContent = "Refund approved"; }
+      else if(guardrail === "deny"){ chipEl.classList.add("deny"); chipEl.querySelector(".lbl").textContent = "Blocked by policy"; }
+    }
+  }
+  function token(t){ raw += t; text.textContent = raw; scroll(); }
+  function hold(){ // escalation pending: mark the refund chip as held for review
+    const list = toolEls["issue_refund"]; if(list&&list.length){ const c=list[list.length-1]; c.querySelector(".spin")?.remove(); c.classList.remove("pending"); c.classList.add("hold"); c.querySelector(".lbl").textContent = "Held for review"; }
+    text.classList.add("hold");
+  }
+  function fill(t){ raw = t; text.textContent = t; }
+  function done(){
+    text.classList.remove("streaming");
+    text.querySelector(".cursor")?.remove();
+    if(!raw){ text.remove(); } // no answer (e.g. pure escalation handled elsewhere)
+    else {
+      meta.hidden = false;
+      const copy = el(`<button title="Copy">${COPY_ICON}<span>Copy</span></button>`);
+      copy.onclick = async () => { try { await navigator.clipboard.writeText(raw); copy.innerHTML = CHECK_ICON+"<span>Copied</span>"; setTimeout(()=>copy.innerHTML=COPY_ICON+"<span>Copy</span>", 1400);} catch{} };
+      meta.appendChild(copy);
+    }
+    scroll();
+  }
+  return { addTool, finishTool, token, hold, fill, done, get raw(){ return raw; } };
 }
 
-function addThinking() {
-  const t = el(`<div class="row agent" id="thinking"><div class="bubble dots"><span>&bull;</span><span>&bull;</span><span>&bull;</span></div></div>`);
-  log.appendChild(t); scroll();
-}
-function clearThinking() { const t = document.getElementById("thinking"); if (t) t.remove(); }
-
-function setBusy(b) { busy = b; sendBtn.disabled = b; input.disabled = b; }
-
-async function post(url, body) {
-  const r = await fetch(url, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
+function escalationCopy(review){
+  const amount = (review.amount_cents/100).toLocaleString(undefined,{style:"currency",currency:"USD"});
+  const reason = (review.policy_reasons||[]).slice(-1)[0] || "it needs a second look";
+  return `This one needs a quick human sign-off before it goes through: ${amount} on ${review.order_id}. ${reason}\n\nReply approve to release the refund, or deny to hold it.`;
 }
 
-async function send(ev) {
-  if (ev) ev.preventDefault();
+function setBusy(b){ busy=b; updateSend(); input.disabled=b; if(!b) input.focus(); }
+function updateSend(){ sendBtn.disabled = busy || !input.value.trim(); }
+
+async function submit(){
   const text = input.value.trim();
-  if (!text || busy) return false;
-  addUser(text); input.value = ""; setBusy(true); addThinking();
+  if(!text || busy) return;
+  addUser(text); input.value=""; autosize(); setBusy(true);
+  const turn = newAssistant();
   try {
-    const data = await post("/v1/chat", { message: text, thread_id: threadId });
-    threadId = data.thread_id;
-    clearThinking(); addAgentTurn(data);
-  } catch (e) {
-    clearThinking();
-    log.appendChild(el(`<div class="row agent"><div class="bubble">Something went wrong (${esc(e.message)}). Try again.</div></div>`));
-  } finally { setBusy(false); input.focus(); }
-  return false;
+    const res = await fetch("/v1/stream", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ message:text, thread_id: threadId }) });
+    const reader = res.body.getReader(); const dec = new TextDecoder(); let buf="";
+    while(true){
+      const { value, done } = await reader.read(); if(done) break;
+      buf += dec.decode(value, { stream:true });
+      let i;
+      while((i = buf.indexOf("\n\n")) >= 0){
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i+2);
+        if(!line.startsWith("data:")) continue;
+        handle(JSON.parse(line.slice(5).trim()), turn);
+      }
+    }
+  } catch(e){
+    turn.fill("Sorry, the connection dropped. Please try again.");
+  } finally { turn.done(); setBusy(false); }
 }
 
-async function resolve(approve, btn) {
-  const actions = btn.parentElement;
-  actions.querySelectorAll("button").forEach(b => b.disabled = true);
-  setBusy(true); addThinking();
-  try {
-    const data = await post(`/v1/chat/${threadId}/resume`, { approve });
-    clearThinking(); addAgentTurn(data);
-  } catch (e) {
-    clearThinking();
-    log.appendChild(el(`<div class="row agent"><div class="bubble">Resume failed (${esc(e.message)}).</div></div>`));
-  } finally { setBusy(false); input.focus(); }
+function handle(ev, turn){
+  switch(ev.type){
+    case "thread": threadId = ev.thread_id; break;
+    case "tool": turn.addTool(ev.name); break;
+    case "tool_result": turn.finishTool(ev.name, ev.guardrail); break;
+    case "token": turn.token(ev.text); break;
+    case "escalated": turn.hold(); turn.fill(escalationCopy(ev.review)); break;
+    case "error": turn.fill(ev.message); break;
+  }
 }
 
-input.focus();
+function autosize(){ input.style.height="auto"; input.style.height = Math.min(input.scrollHeight, 140)+"px"; }
+input.addEventListener("input", () => { autosize(); updateSend(); });
+input.addEventListener("keydown", e => { if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); submit(); } });
+form.addEventListener("submit", e => { e.preventDefault(); submit(); });
+
+renderEmpty();
 </script>
 </body>
 </html>

@@ -4,14 +4,16 @@
 
 from __future__ import annotations
 
+import json
 import uuid
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Response, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.agent import RefundAgent
@@ -65,6 +67,26 @@ async def health_readiness(response: Response) -> dict:
     except Exception as exc:  # noqa: BLE001 - readiness reports, doesn't raise
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return {"status": "error", "store": str(exc)}
+
+
+@app.post("/v1/stream")
+async def stream(body: ChatBody) -> StreamingResponse:
+    thread_id = body.thread_id or f"thread_{uuid.uuid4().hex[:16]}"
+
+    async def events() -> AsyncIterator[bytes]:
+        yield _sse({"type": "thread", "thread_id": thread_id})
+        try:
+            async for event in app.state.agent.stream(thread_id, body.message):
+                yield _sse(event)
+        except Exception as exc:  # noqa: BLE001 - surface a clean error to the client
+            log.error("stream_error", thread_id=thread_id, error=str(exc))
+            yield _sse({"type": "error", "message": "The agent hit an error. Please try again."})
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no"})
+
+
+def _sse(obj: dict) -> bytes:
+    return f"data: {json.dumps(obj)}\n\n".encode()
 
 
 @app.post("/v1/chat")

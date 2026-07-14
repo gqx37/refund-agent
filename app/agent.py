@@ -10,9 +10,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
+from collections.abc import AsyncIterator
+
 from langchain.agents import create_agent
 from langchain.messages import ToolMessage
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessageChunk
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
@@ -109,10 +112,41 @@ class RefundAgent:
         result = await self._agent.ainvoke(resume, self._thread(thread_id))
         return self._interpret(result)
 
-    def astream(self, thread_id: str, message: str):
-        """Token/tool-event stream for the chat endpoint."""
-        payload = {"messages": [{"role": "user", "content": message}]}
-        return self._agent.astream(payload, self._thread(thread_id), stream_mode="messages")
+    async def stream(self, thread_id: str, message: str) -> AsyncIterator[dict]:
+        """Structured event stream for the web UI: tool calls as they happen, the
+        model's answer token by token, and an escalation when the guardrail routes
+        to a human. A typed reply on a paused thread resumes it (no buttons needed)."""
+        config = self._thread(thread_id)
+        state = await self._agent.aget_state(config)
+        payload: Any = Command(resume=message) if state.next else {"messages": [{"role": "user", "content": message}]}
+
+        tool_names: dict[str, str] = {}
+        async for mode, data in self._agent.astream(payload, config, stream_mode=["updates", "messages"]):
+            if mode == "messages":
+                chunk, _meta = data
+                if isinstance(chunk, AIMessageChunk) and isinstance(chunk.content, str) and chunk.content:
+                    yield {"type": "token", "text": chunk.content}
+                continue
+            for node, update in data.items():
+                if node == "__interrupt__":
+                    interrupts = update
+                    yield {"type": "escalated", "review": getattr(interrupts[0], "value", interrupts[0])}
+                    continue
+                for m in (update or {}).get("messages", []) if isinstance(update, dict) else []:
+                    for call in getattr(m, "tool_calls", None) or []:
+                        tool_names[call["id"]] = call["name"]
+                        yield {"type": "tool", "name": call["name"], "args": call["args"]}
+                    if isinstance(m, ToolMessage):
+                        content = str(m.content)
+                        name = tool_names.get(m.tool_call_id) or getattr(m, "name", None)
+                        guardrail = None
+                        # Identify the refund outcome by content too: on a resume turn
+                        # the originating tool_call wasn't seen in this stream.
+                        if name == "issue_refund" or content.startswith(("Refunded ", "Refund not issued")):
+                            name = "issue_refund"
+                            guardrail = "deny" if content.startswith("Refund not issued") else "approve"
+                        yield {"type": "tool_result", "name": name, "guardrail": guardrail}
+        yield {"type": "done"}
 
     async def verify(self) -> None:
         await self._facts.verify()
