@@ -10,9 +10,19 @@ from typing import Optional, TypedDict
 from urllib.parse import parse_qsl
 
 import httpx
+from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 
 from app.models import CustomerRiskFacts, OrderFacts
 from app.sample_data import CHARGES, LINKS, ORDERS
+
+
+class ScriptedModel(FakeMessagesListChatModel):
+    """A fake chat model that replays scripted AIMessages (including tool calls),
+    so the full agent can be driven end-to-end without an LLM. bind_tools is a
+    no-op: the tool calls are already baked into the script."""
+
+    def bind_tools(self, tools, **kwargs):  # noqa: ANN001, ARG002
+        return self
 
 
 class InMemoryGraphStore:

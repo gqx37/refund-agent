@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.integrations.stripe import RefundCreateParams, StripeError, build_stripe_tools
+from app.integrations.stripe import RefundCreateParams, StripeError
 from app.sample_data import ORDER_CLEAN, ORDERS
 
 # The charge behind the clean sample order (2000, unrefunded).
@@ -53,13 +53,6 @@ async def test_refund_is_idempotent(stripe_client):
     assert first.id == second.id
     charge = await stripe_client.retrieve_charge(CLEAN_CHARGE)
     assert charge.amount_refunded == 500  # applied once, not twice
-
-
-async def test_tools_are_callable(stripe_client):
-    tools = build_stripe_tools(stripe_client)
-    assert [t.name for t in tools.all] == ["charge_lookup", "issue_refund"]
-    charge = await tools.charge_lookup.ainvoke({"charge_id": CLEAN_CHARGE})
-    assert charge["amount"] == 2_000
 
 
 def test_refund_requires_exactly_one_target():

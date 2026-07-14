@@ -1,104 +1,55 @@
-# End-to-end runs through the agent, on fakes, with no LLM.
+# End-to-end through create_agent with a scripted model (no real LLM). Proves the
+# full wiring: model calls issue_refund -> guardrail runs the policy -> the refund
+# executes or is blocked -> the agent replies.
 
 from __future__ import annotations
 
-from app.models import Outcome, RefundRequest
-from app.sample_data import (
-    ORDER_CLEAN,
-    ORDER_DISPUTED,
-    ORDER_FRAUD_RING,
-    ORDER_FULLY_REFUNDED,
-    ORDER_HIGH_VALUE,
-    ORDER_OUT_OF_WINDOW,
-    ORDER_PARTIALLY_REFUNDED,
-    ORDER_SERIAL_REFUNDER,
-)
+from datetime import datetime, timezone
+
+import pytest
+from langchain_core.messages import AIMessage
+
+from app.agent import RefundAgent
+from app.configs import StripeConfig
+from app.integrations.stripe import StripeClient
+from app.policy import RefundPolicy
+from app.sample_data import ORDER_CLEAN, ORDER_DISPUTED, ORDERS
+from tests.fakes import FakeStripe, InMemoryGraphStore, ScriptedModel
+
+NOW = datetime(2026, 7, 14, tzinfo=timezone.utc)
+CLEAN_CHARGE = next(o.charge_id for o in ORDERS if o.order_id == ORDER_CLEAN)
 
 
-def req(order_id: str, **kw) -> RefundRequest:
-    return RefundRequest(request_id=f"req_{order_id}", order_id=order_id, **kw)
+def _refund_call(order_id: str):
+    return AIMessage(content="", tool_calls=[{"name": "issue_refund", "args": {"order_id": order_id}, "id": "c1"}])
 
 
-async def test_clean_request_is_approved_and_refunded(agent):
-    out = await agent.submit(req(ORDER_CLEAN))
-    assert out.status == "approved"
-    assert out.decision.rule_id == "policy_clean"
-    assert out.refund["amount"] == 2_000
-    assert "Refunded" in out.reply
+@pytest.fixture
+def stripe_client() -> StripeClient:
+    return StripeClient(StripeConfig(api_key="sk_stub"), transport=FakeStripe().transport)
 
 
-async def test_out_of_window_is_denied(agent):
-    out = await agent.submit(req(ORDER_OUT_OF_WINDOW))
-    assert out.status == "denied"
-    assert out.decision.rule_id == "outside_refund_window"
-    assert out.refund is None
+def _agent(stripe_client: StripeClient, script: list) -> RefundAgent:
+    return RefundAgent(
+        fact_store=InMemoryGraphStore(now=NOW),
+        stripe=stripe_client,
+        policy=RefundPolicy(),
+        model=ScriptedModel(responses=script),
+        now=NOW,
+    )
 
 
-async def test_disputed_is_denied(agent):
-    out = await agent.submit(req(ORDER_DISPUTED))
-    assert out.decision.rule_id == "charge_disputed"
+async def test_agent_refunds_a_clean_order(stripe_client):
+    agent = _agent(stripe_client, [_refund_call(ORDER_CLEAN), AIMessage(content="Done, you're refunded.")])
+    out = await agent.chat("t1", "refund my order please")
+    assert out["status"] == "replied"
+    assert (await stripe_client.retrieve_charge(CLEAN_CHARGE)).amount_refunded == 2_000
 
 
-async def test_already_refunded_is_denied(agent):
-    out = await agent.submit(req(ORDER_FULLY_REFUNDED))
-    assert out.decision.rule_id == "already_refunded"
-
-
-async def test_unknown_order_is_denied(agent):
-    out = await agent.submit(req("SO-00000"))
-    assert out.decision.rule_id == "order_not_found"
-
-
-async def test_high_value_escalates(agent):
-    out = await agent.submit(req(ORDER_HIGH_VALUE))
-    assert out.status == "escalated"
-    assert out.review["amount_cents"] == 60_000
-    assert out.refund is None
-
-
-async def test_serial_refunder_escalates(agent):
-    assert (await agent.submit(req(ORDER_SERIAL_REFUNDER))).status == "escalated"
-
-
-async def test_linked_account_escalates(agent):
-    assert (await agent.submit(req(ORDER_FRAUD_RING))).status == "escalated"
-
-
-async def test_partial_refund_uses_remaining_balance_not_charge_total(agent):
-    # Charge is 4000 with 1500 already refunded; asking for the 2500 that remains
-    # refunds exactly that, never the 4000 total.
-    out = await agent.submit(req(ORDER_PARTIALLY_REFUNDED, requested_amount_cents=2_500))
-    assert out.status == "approved"
-    assert out.decision.approved_amount_cents == 2_500
-    assert out.refund["amount"] == 2_500
-
-
-async def test_partial_refund_over_remaining_balance_is_denied(agent):
-    out = await agent.submit(req(ORDER_PARTIALLY_REFUNDED, requested_amount_cents=3_000))
-    assert out.status == "denied"
-    assert out.decision.rule_id == "amount_exceeds_remaining"
-    assert out.refund is None
-
-
-async def test_escalation_resumed_with_approval_refunds(agent):
-    request = req(ORDER_HIGH_VALUE)
-    assert (await agent.submit(request)).status == "escalated"
-    resolved = await agent.resolve(request.request_id, approve=True)
-    assert resolved.status == "approved"
-    assert resolved.decision.rule_id == "human_approved"
-    assert resolved.refund["amount"] == 60_000
-
-
-async def test_escalation_resumed_with_denial_does_not_refund(agent):
-    request = req(ORDER_SERIAL_REFUNDER)
-    assert (await agent.submit(request)).status == "escalated"
-    resolved = await agent.resolve(request.request_id, approve=False)
-    assert resolved.status == "denied"
-    assert resolved.decision.rule_id == "human_denied"
-    assert resolved.refund is None
-
-
-async def test_decision_authorizes_before_any_refund_exists(agent):
-    out = await agent.submit(req(ORDER_CLEAN))
-    assert out.decision.outcome is Outcome.APPROVE
-    assert out.decision.approved_amount_cents == 2_000
+async def test_agent_is_blocked_on_a_disputed_order(stripe_client):
+    agent = _agent(stripe_client, [_refund_call(ORDER_DISPUTED), AIMessage(content="Sorry, it's disputed.")])
+    out = await agent.chat("t2", "refund my disputed order")
+    assert out["status"] == "replied"
+    # The guardrail blocked it: the disputed charge was never refunded.
+    disputed_charge = next(o.charge_id for o in ORDERS if o.order_id == ORDER_DISPUTED)
+    assert (await stripe_client.retrieve_charge(disputed_charge)).amount_refunded == 0

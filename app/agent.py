@@ -1,79 +1,59 @@
-# The refund agent: a LangGraph state machine wrapped in a class.
+# The refund agent: create_agent with two tools and the policy guardrail.
 #
-#   intake -> gather_facts -> evaluate_policy -> {execute | escalate | reply}
-#
-# The agent's tools live in app/integrations/stripe (charge_lookup, issue_refund).
-# The graph invokes them; the LLM is never bound to them. So `issue_refund` runs
-# only after an APPROVE decision (policy-clean or human-approved). The model's job
-# is to fill intake gaps and phrase the reply, nothing that moves money.
+# The model drives — it converses, looks orders up, and decides to attempt a
+# refund. RefundGuardrail (a wrap_tool_call middleware) enforces the deterministic
+# policy at the moment issue_refund is called, so the agent is free to reason but
+# cannot issue a refund the policy would reject.
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Optional
 
+from langchain.agents import create_agent
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-from langgraph.graph import END, START, StateGraph
-from langgraph.types import Command, interrupt
-from pydantic import BaseModel, Field
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command
 
+from app.guardrail import RefundGuardrail
 from app.integrations.graph import GraphStore
-from app.integrations.stripe import RefundReason, StripeClient, StripeError, build_stripe_tools
-from app.models import (
-    ChargeFacts,
-    CustomerRiskFacts,
-    Outcome,
-    OrderFacts,
-    PolicyDecision,
-    RefundFacts,
-    RefundOutcome,
-    RefundRequest,
-    RefundState,
+from app.integrations.stripe import StripeClient
+from app.policy import RefundPolicy
+from app.tools import build_tools
+
+_SYSTEM_PROMPT = (
+    "You are a refund assistant for an online store. Help the customer with their refund "
+    "request in a warm, plain way.\n"
+    "- Use order_lookup to understand an order before acting; never guess amounts or dates.\n"
+    "- To refund, call issue_refund with the order id (and an amount_cents for a partial refund).\n"
+    "- A refund policy vets every issue_refund call and may block or escalate it. If a refund is "
+    "not issued, explain the reason to the customer honestly and do not promise it anyway.\n"
+    "- Never claim a refund happened unless the tool confirms it. No em dashes."
 )
-from app.policy import RefundPolicy, evaluate
-
-
-class _IntakeExtract(BaseModel):
-    reason: Optional[RefundReason] = None
-    requested_amount_cents: Optional[int] = Field(None, ge=1)
 
 
 class RefundAgent:
-    INTAKE_SYSTEM = (
-        "Extract structured fields from a customer's refund message. Return only what the "
-        "customer expressed. Do NOT decide whether a refund is allowed, and do NOT invent an "
-        "amount. reason: one of duplicate, fraudulent, requested_by_customer, or null if unclear. "
-        "requested_amount_cents: an integer only if the customer named a specific partial amount; "
-        "otherwise null (the full amount)."
-    )
-    REPLY_SYSTEM = (
-        "Write a short, warm reply about a refund request. You are given a DECISION already made "
-        "by a policy engine; phrase it, never contradict it or promise a refund it did not "
-        "approve. Approved: confirm the amount. Denied: give the specific reason, without blame. "
-        "Escalated: say a teammate is reviewing. Two or three sentences. No em dashes."
-    )
-
     def __init__(
         self,
         *,
         fact_store: Any,
         stripe: StripeClient,
         policy: RefundPolicy,
-        llm: Optional[BaseChatModel] = None,
+        model: BaseChatModel,
         now: Optional[datetime] = None,
         checkpointer: Optional[BaseCheckpointSaver] = None,
     ) -> None:
         self._facts = fact_store
         self._stripe = stripe
-        self._tools = build_stripe_tools(stripe)
-        self._policy = policy
-        self._llm = llm
-        self._now = now
-        self._graph = self._compile(checkpointer or self._default_checkpointer())
+        self._agent = create_agent(
+            model=model,
+            tools=build_tools(fact_store, stripe),
+            system_prompt=_SYSTEM_PROMPT,
+            middleware=[RefundGuardrail(fact_store, stripe, policy, now=now)],
+            checkpointer=checkpointer or InMemorySaver(),
+        )
 
     @classmethod
     def production(cls, policy: Optional[RefundPolicy] = None) -> "RefundAgent":
@@ -86,19 +66,23 @@ class RefundAgent:
             fact_store=GraphStore(Neo4jConfig()),
             stripe=StripeClient(StripeConfig()),
             policy=policy or RefundPolicy(),
-            llm=ChatFireworks(model=cfg.model, temperature=cfg.temperature, api_key=cfg.api_key),  # type: ignore[call-arg]
+            model=ChatFireworks(model=cfg.model, temperature=cfg.temperature, api_key=cfg.api_key),  # type: ignore[call-arg]
         )
 
-    # --- public API --------------------------------------------------------
+    async def chat(self, thread_id: str, message: str) -> dict:
+        payload = {"messages": [{"role": "user", "content": message}]}
+        result = await self._agent.ainvoke(payload, self._thread(thread_id))  # type: ignore[call-overload]
+        return self._interpret(result)
 
-    async def submit(self, request: RefundRequest) -> RefundOutcome:
-        result = await self._graph.ainvoke({"request": request}, self._thread(request.request_id))
-        return self._interpret(request.request_id, result)
+    async def resolve(self, thread_id: str, *, approve: bool) -> dict:
+        resume: Command = Command(resume={"approve": approve})
+        result = await self._agent.ainvoke(resume, self._thread(thread_id))
+        return self._interpret(result)
 
-    async def resolve(self, request_id: str, *, approve: bool, note: Optional[str] = None) -> RefundOutcome:
-        command: Command = Command(resume={"approve": approve, "note": note})
-        result = await self._graph.ainvoke(command, self._thread(request_id))
-        return self._interpret(request_id, result)
+    def astream(self, thread_id: str, message: str):
+        """Token/tool-event stream for the chat endpoint."""
+        payload = {"messages": [{"role": "user", "content": message}]}
+        return self._agent.astream(payload, self._thread(thread_id), stream_mode="messages")  # type: ignore[call-overload]
 
     async def verify(self) -> None:
         await self._facts.verify()
@@ -107,195 +91,15 @@ class RefundAgent:
         await self._stripe.aclose()
         await self._facts.aclose()
 
-    # --- graph nodes -------------------------------------------------------
-
-    async def _intake(self, state: RefundState) -> dict:
-        request = state["request"]
-        if not (self._llm and request.customer_message):
-            return {"request": request}
-        if request.reason is not None and request.requested_amount_cents is not None:
-            return {"request": request}
-        try:
-            extractor = self._llm.with_structured_output(_IntakeExtract)
-            result = await extractor.ainvoke(
-                [SystemMessage(content=self.INTAKE_SYSTEM), HumanMessage(content=request.customer_message)]
-            )
-            got = result if isinstance(result, _IntakeExtract) else _IntakeExtract()
-            request = request.model_copy(update={
-                "reason": request.reason or got.reason,
-                "requested_amount_cents": request.requested_amount_cents or got.requested_amount_cents,
-            })
-        except Exception:
-            pass  # extraction is best-effort
-        return {"request": request}
-
-    async def _gather_facts(self, state: RefundState) -> dict:
-        request = state["request"]
-
-        order = await self._facts.order_facts(request.order_id)
-        if order is None:
-            return {"decision": self._deny("order_not_found", f"No order '{request.order_id}' was found.")}
-
-        risk = await self._facts.customer_risk(order.customer_id)
-        if risk is None:
-            return {"decision": self._deny("customer_not_found", f"No customer '{order.customer_id}' was found.")}
-
-        try:
-            charge = await self._tools.charge_lookup.ainvoke({"charge_id": order.charge_id})
-        except StripeError as exc:
-            return {"error": str(exc), "decision": self._deny("charge_lookup_failed", exc.message)}
-
-        return {"facts": RefundFacts(
-            order=order,
-            customer_risk=risk,
-            charge=ChargeFacts(
-                charge_id=charge["id"],
-                amount_cents=charge["amount"],
-                amount_refunded_cents=charge["amount_refunded"],
-                currency=charge["currency"],
-                disputed=charge["disputed"],
-                status=charge["status"],
-            ),
-        )}
-
-    async def _evaluate_policy(self, state: RefundState) -> dict:
-        if state.get("decision") is not None:  # gather_facts already decided
-            return {}
-        return {"decision": evaluate(state["request"], state["facts"], self._policy, now=self._now)}
-
-    async def _escalate(self, state: RefundState) -> dict:
-        request, facts, decision = state["request"], state["facts"], state["decision"]
-        amount = request.requested_amount_cents or facts.charge.remaining_refundable_cents
-
-        human = interrupt({
-            "type": "refund_review",
-            "request_id": request.request_id,
-            "order_id": request.order_id,
-            "customer_id": facts.order.customer_id,
-            "amount_cents": amount,
-            "currency": facts.charge.currency,
-            "policy_reasons": decision.reasons,
-            "customer_message": request.customer_message,
-        })
-        approve = bool(human.get("approve")) if isinstance(human, dict) else bool(human)
-        note = human.get("note") if isinstance(human, dict) else None
-        return {"decision": self._apply_review(decision, approve, amount), "human_note": note}
-
-    async def _execute_refund(self, state: RefundState) -> dict:
-        request, facts, decision = state["request"], state["facts"], state["decision"]
-        if decision.outcome is not Outcome.APPROVE or decision.approved_amount_cents is None:
-            return {"error": "execute_refund reached without an APPROVE decision"}
-        args: dict = {
-            "charge": facts.charge.charge_id,
-            "amount": decision.approved_amount_cents,
-            "metadata": {"request_id": request.request_id, "order_id": request.order_id},
-        }
-        if request.reason is not None:
-            args["reason"] = request.reason.value
-        try:
-            return {"refund": await self._tools.issue_refund.ainvoke(args)}
-        except StripeError as exc:
-            return {"error": str(exc)}
-
-    async def _compose_reply(self, state: RefundState) -> dict:
-        grounded = self._grounded_summary(state)
-        if not self._llm:
-            return {"reply": grounded}
-        try:
-            decision = state.get("decision")
-            context = f"Outcome: {decision.outcome.value if decision else 'unknown'}\nSummary: {grounded}"
-            reply = await self._llm.ainvoke([SystemMessage(content=self.REPLY_SYSTEM), HumanMessage(content=context)])
-            return {"reply": str(reply.content).strip() or grounded}
-        except Exception:
-            return {"reply": grounded}
-
-    # --- helpers -----------------------------------------------------------
+    @staticmethod
+    def _thread(thread_id: str) -> RunnableConfig:
+        return {"configurable": {"thread_id": thread_id}}
 
     @staticmethod
-    def _grounded_summary(state: RefundState) -> str:
-        decision, refund, error = state.get("decision"), state.get("refund"), state.get("error")
-        if error and not refund:
-            return f"There was a problem processing the refund: {error}."
-        if decision and decision.outcome is Outcome.APPROVE and refund:
-            return f"Approved. Refunded {refund['amount'] / 100:.2f} {refund['currency'].upper()}."
-        if decision and decision.outcome is Outcome.DENY:
-            return f"Denied. {decision.reasons[-1] if decision.reasons else ''}".strip()
-        return "This request is being reviewed by a teammate."
-
-    @staticmethod
-    def _apply_review(decision: PolicyDecision, approve: bool, amount: int) -> PolicyDecision:
-        if approve:
-            return decision.model_copy(update={
-                "outcome": Outcome.APPROVE, "approved_amount_cents": amount,
-                "rule_id": "human_approved", "reasons": decision.reasons + ["A human reviewer approved."],
-            })
-        return decision.model_copy(update={
-            "outcome": Outcome.DENY, "approved_amount_cents": None,
-            "rule_id": "human_denied", "reasons": decision.reasons + ["A human reviewer declined."],
-        })
-
-    @staticmethod
-    def _deny(rule_id: str, reason: str) -> PolicyDecision:
-        return PolicyDecision(outcome=Outcome.DENY, rule_id=rule_id, reasons=[reason])
-
-    @staticmethod
-    def _route(state: RefundState) -> str:
-        outcome = state["decision"].outcome
-        return {"approve": "execute", "escalate": "escalate"}.get(outcome.value, "compose")
-
-    @staticmethod
-    def _route_after_review(state: RefundState) -> str:
-        return "execute" if state["decision"].outcome is Outcome.APPROVE else "compose"
-
-    @staticmethod
-    def _thread(request_id: str) -> dict:
-        return {"configurable": {"thread_id": request_id}}
-
-    @staticmethod
-    def _interpret(request_id: str, result: dict[str, Any]) -> RefundOutcome:
+    def _interpret(result: dict) -> dict:
         interrupts = result.get("__interrupt__")
         if interrupts:
-            return RefundOutcome(
-                request_id=request_id, status="escalated",
-                review=getattr(interrupts[0], "value", interrupts[0]),
-            )
-        refund, error = result.get("refund"), result.get("error")
-        status = "error" if (error and not refund) else ("approved" if refund else "denied")
-        return RefundOutcome(
-            request_id=request_id, status=status, decision=result.get("decision"),
-            refund=refund, reply=result.get("reply"), error=error,
-        )
-
-    @staticmethod
-    def _default_checkpointer() -> MemorySaver:
-        # Domain types are checkpointed as state; allowlist them so the serde
-        # round-trips them silently and stays restricted to types we own.
-        types = [RefundRequest, RefundFacts, OrderFacts, CustomerRiskFacts, ChargeFacts, PolicyDecision, Outcome]
-        allowlist = [(t.__module__, t.__qualname__) for t in types]
-        return MemorySaver(serde=JsonPlusSerializer(allowed_msgpack_modules=allowlist))
-
-    # --- wiring ------------------------------------------------------------
-
-    def _compile(self, checkpointer: BaseCheckpointSaver):
-        graph = StateGraph(RefundState)
-        graph.add_node("intake", self._intake)
-        graph.add_node("gather_facts", self._gather_facts)
-        graph.add_node("evaluate_policy", self._evaluate_policy)
-        graph.add_node("escalate", self._escalate)
-        graph.add_node("execute_refund", self._execute_refund)
-        graph.add_node("compose_reply", self._compose_reply)
-
-        graph.add_edge(START, "intake")
-        graph.add_edge("intake", "gather_facts")
-        graph.add_edge("gather_facts", "evaluate_policy")
-        graph.add_conditional_edges(
-            "evaluate_policy", self._route,
-            {"execute": "execute_refund", "escalate": "escalate", "compose": "compose_reply"},
-        )
-        graph.add_conditional_edges(
-            "escalate", self._route_after_review,
-            {"execute": "execute_refund", "compose": "compose_reply"},
-        )
-        graph.add_edge("execute_refund", "compose_reply")
-        graph.add_edge("compose_reply", END)
-        return graph.compile(checkpointer=checkpointer)
+            return {"status": "escalated", "review": getattr(interrupts[0], "value", interrupts[0])}
+        messages = result.get("messages", [])
+        reply = messages[-1].content if messages else ""
+        return {"status": "replied", "reply": reply}

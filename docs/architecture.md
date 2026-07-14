@@ -1,62 +1,68 @@
 # Architecture
 
-## Layers
+## The shape
 
-Four concerns, kept separate:
+A real tool-using agent (`create_agent`) with a deterministic guardrail injected
+as middleware. Two ideas:
 
-- **Guardrails** (`app/policy.py`): whether a refund is allowed. A pure
-  function of `(request, facts, policy)` — no I/O, no LLM, no clock except the one
-  passed in — so it's fully unit-testable and its verdict is reproducible.
-- **Facts** (Neo4j): who the customer is, what they ordered, which charge paid for
-  it, which accounts share a payment method. Traversal-shaped data.
-- **Money** (Stripe): the current charge and refund balances, read at decision time.
-- **Reasoning** (Nemotron 3 Ultra on Fireworks): fills intake gaps and phrases the
-  reply. Nothing it produces authorizes an action.
+- **Sierra — declarative guardrails.** The agent is creative in the conversation,
+  but the moments that matter (moving money) pass through rigid, deterministic
+  business logic. Here that logic is `app/policy.py`, enforced by a `wrap_tool_call`
+  middleware at the instant `issue_refund` is called.
+- **Nemotron + harness.** A near-frontier open model becomes useful when you wrap
+  it in tools, grounding, and guardrails. The model drives; the harness constrains.
 
-Boundaries that don't move: money truth is Stripe's, never the graph's; rules are
-code's, never the graph's; facts are the graph's, never the policy's.
+## Components
 
-## The refund-authorization invariant
+- **`app/agent.py`** — `create_agent(model, tools=[order_lookup, issue_refund],
+  middleware=[RefundGuardrail(...)])`. The model converses, looks orders up, and
+  decides when to refund.
+- **`app/tools.py`** — the tools. `order_lookup` (read) gives the model situational
+  awareness; `issue_refund` (write) performs the refund.
+- **`app/guardrail.py`** — `RefundGuardrail(AgentMiddleware)`. Its `awrap_tool_call`
+  intercepts `issue_refund`, re-gathers the authoritative facts, runs
+  `policy.evaluate`, and returns:
+  - **APPROVE** → `await handler(request)` (the refund tool runs)
+  - **DENY** → a `ToolMessage` back to the model (the tool never runs; the model
+    explains to the customer)
+  - **ESCALATE** → `interrupt()` for a human; on resume, approve runs the tool,
+    deny blocks it
+- **`app/policy.py`** — a pure function of `(request, facts, policy)`: window,
+  amount ceiling, no-double-refund, dispute block, customer/linked-account refund
+  rate. No I/O, no LLM, fully unit-testable.
+- **`app/facts.py`** — `gather_facts(graph, stripe, order_id)`, shared by the tools
+  and the guardrail.
 
-`execute_refund` has two in-edges, both from an `approve` decision:
+## Why the guardrail re-verifies
 
-1. `evaluate_policy` → approve (policy-clean), or
-2. `escalate` → a human approved.
+The guardrail does not trust the context the model gathered. When `issue_refund` is
+called it independently reads the order and customer history from Neo4j and the
+charge from Stripe, then runs the policy against *those* facts. The model can be
+wrong, confused, or adversarially prompted; the deterministic gate still holds.
 
-There is no path from the LLM to `execute_refund`. The agent's tools
-(`charge_lookup`, `issue_refund`) are real LangChain tools, but they are invoked by
-the graph, never bound to the model; only the deterministic node calls
-`issue_refund`, after checking the decision. Asserted in `tests/test_agent.py`.
+Money truth is Stripe's, never the graph's; the rules are code's, never the model's;
+the facts are the graph's, never the policy's.
 
 ## Fixed lookups vs Text2Cypher
 
-The lookups the decision needs (order facts, customer risk) are parameterized
-Cypher in `app/integrations/graph.py`. You don't ask an LLM to regenerate a query
-whose shape you already know — it adds latency, cost, and an injection surface for
-nothing. See `design-note-neo4j-vs-code.md`.
-
-## Human-in-the-loop
-
-An `escalate` decision calls LangGraph's `interrupt()`, pausing the run with a
-review payload. A reviewer answers via `POST /v1/refund-requests/{id}/resolve` and
-the same run resumes from the interrupt — approve routes to `execute_refund`, deny
-to the reply. State is durable in the checkpointer (in-memory here; Postgres in
-production).
+The lookups the decision needs are parameterized Cypher on `GraphStore`. You don't
+ask an LLM to regenerate a query whose shape you already know — it adds latency,
+cost, and an injection surface for nothing. See `design-note-neo4j-vs-code.md`.
 
 ## Reliability
 
 - **Idempotency**: refunds derive a deterministic key from their args, so a retry
   replays instead of double-refunding.
-- **Version pin**: the client sends a pinned `Stripe-Version` so a provider upgrade
-  can't reshape responses on Stripe's schedule.
+- **Version pin**: the Stripe client sends a pinned `Stripe-Version`.
 - **Typed errors**: provider errors become a `StripeError` carrying Stripe's
   type/code/param/message.
-- **Health split**: liveness is dependency-free (a Neo4j outage won't restart the
-  machine); readiness returns 503 so the load balancer stops routing.
+- **Health split**: liveness is dependency-free; readiness returns 503 if Neo4j is
+  unreachable.
 
 ## Testability
 
-`RefundAgent` takes its fact store, Stripe client, and LLM as constructor args, so
-production wiring (Neo4j + httpx + Fireworks) and test wiring (in-memory graph +
-fake Stripe transport + no model) build the same agent. The whole thing runs in CI
-with no keys and no database.
+`RefundAgent` takes its fact store, Stripe client, and model as constructor args.
+Tests build it with an in-memory graph, a fake Stripe transport, and a scripted
+model, so the full `create_agent` graph runs end-to-end in CI with no keys. The
+guardrail is also tested in isolation by constructing a `ToolCallRequest` and a fake
+handler — the safety-critical logic is verified without an LLM at all.

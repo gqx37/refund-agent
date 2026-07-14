@@ -1,10 +1,10 @@
-# Domain models and graph state. Money is integer cents everywhere.
+# Domain models. Money is integer cents everywhere.
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, TypedDict
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -79,27 +79,3 @@ class PolicyDecision(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     approved_amount_cents: Optional[int] = None  # set only on APPROVE
     rule_id: Optional[str] = None  # the decisive rule, for logs and tests
-
-
-class RefundState(TypedDict, total=False):
-    """The agent's graph state. total=False: keys fill in as the run progresses."""
-
-    request: RefundRequest
-    facts: RefundFacts
-    decision: PolicyDecision
-    refund: dict
-    error: str
-    reply: str
-    human_note: str
-
-
-class RefundOutcome(BaseModel):
-    """The result of submit() / resolve()."""
-
-    request_id: str
-    status: str  # approved | denied | escalated | error
-    decision: Optional[PolicyDecision] = None
-    refund: Optional[dict] = None
-    reply: Optional[str] = None
-    review: Optional[dict] = None  # reviewer payload when escalated
-    error: Optional[str] = None

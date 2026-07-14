@@ -47,14 +47,8 @@ class Refund(BaseModel):
     status: Optional[RefundStatus] = None
 
 
-class ChargeLookup(BaseModel):
-    """Args for the charge_lookup tool."""
-
-    charge_id: str = Field(..., description="The Stripe charge id (ch_...).")
-
-
 class RefundCreateParams(BaseModel):
-    """Args for the issue_refund tool / POST /v1/refunds. Exactly one target."""
+    """Refund args / POST /v1/refunds. Exactly one target."""
 
     model_config = ConfigDict(extra="forbid")
 

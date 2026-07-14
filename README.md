@@ -1,36 +1,51 @@
 # Policy-Constrained Refund Agent (Stripe)
 
-An agent that handles customer refund requests where the language model reads
-intent and writes the reply, but **the decision of whether to refund is made by
-deterministic code, and the model is given no capability to move money**.
+A real tool-using agent that handles customer refunds, with a **deterministic
+policy guardrail wired in as middleware**. The model reasons and acts freely; the
+guardrail runs at the moment it tries to move money and can block or escalate the
+refund. That's the Sierra split — creative in the conversation, rigid in the
+moments that matter.
 
 ```
-intake ──▶ gather_facts ──▶ evaluate_policy ──┬─ approve ─▶ execute_refund ─┐
- (LLM)      (graph+Stripe)     (pure code)     ├─ deny ─────────────────────▶ reply ─▶ done
-                                               └─ escalate ─▶ human review ──┘   (LLM)
+                 ┌──────── create_agent loop ────────┐
+  customer ─▶ model ⇄ tools:  order_lookup (read)     │
+                    │         issue_refund (write) ──┐ │
+                    │                                │ │
+                    │        RefundGuardrail.wrap_tool_call
+                    │        runs policy.evaluate() ─┤ │
+                    │          approve → refund      │ │
+                    │          deny    → tool blocked│ │
+                    │          escalate→ human review┘ │
+                 └────────────────────────────────────┘
 ```
 
-| Layer | Owns | Where |
-|---|---|---|
-| Guardrails | whether a refund is allowed | `app/policy.py` (pure function) |
-| Facts | customer, order, linked accounts | Neo4j (`app/integrations/graph.py`) |
-| Tools | look up a charge, issue a refund | `app/integrations/stripe/tools.py` |
-| Reasoning | extract intent, phrase the reply | Nemotron 3 Ultra on Fireworks |
+- **The agent** (`app/agent.py`): `create_agent(model, tools, middleware=[RefundGuardrail()])`.
+- **The tools** (`app/tools.py`): `order_lookup`, `issue_refund` — real LangChain tools.
+- **The guardrail** (`app/guardrail.py`): a `wrap_tool_call` middleware that
+  intercepts `issue_refund`, independently re-gathers the authoritative facts, runs
+  the deterministic policy, and lets the refund through, blocks it, or interrupts
+  for a human.
+- **The policy** (`app/policy.py`): a pure function — refund window, amount ceiling,
+  no-double-refund, dispute block, fraud-rate escalation.
+- **The model**: Nemotron 3 Ultra on Fireworks.
 
-The agent's tools are `charge_lookup` and `issue_refund`. The graph invokes them;
-the LLM is never bound to them, so `issue_refund` runs only after an `approve`
-decision (policy-clean or a human's approval).
+The guardrail doesn't trust what the model gathered — it re-verifies against Neo4j
+(order + customer history) and Stripe (money) at the instant of the action.
 
 ## Run the tests, no keys
 
-The whole agent runs on fakes (a fake Stripe transport and an in-memory graph),
-so the test suite needs no keys, no network, no Postgres:
+The agent runs on fakes (a scripted model, a fake Stripe transport, an in-memory
+graph), so the suite needs no keys, no network, no Postgres:
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -e '.[dev]'
-pytest        # 31 tests: policy, Stripe client, full agent flow + human resume
+pytest        # 31 tests: policy, guardrail, tools, Stripe client, full agent flow
 ```
+
+`test_guardrail.py` exercises the safety-critical path directly (allow / block /
+escalate); `test_agent.py` drives the real `create_agent` graph end-to-end with a
+scripted model and asserts a disputed charge is never refunded.
 
 ## Run it for real
 
@@ -41,10 +56,11 @@ uvicorn app.main:app
 ```
 
 ```bash
-curl -sX POST localhost:8080/v1/refund-requests -H 'content-type: application/json' \
-  -d '{"order_id":"SO-10432","customer_message":"arrived broken, refund please"}'
+curl -sX POST localhost:8080/v1/chat -H 'content-type: application/json' \
+  -d '{"message":"I want a refund on order SO-10432, it arrived broken"}'
 
-curl -sX POST localhost:8080/v1/refund-requests/req_123/resolve \
+# answer an escalation (human in the loop)
+curl -sX POST localhost:8080/v1/chat/THREAD_ID/resume \
   -H 'content-type: application/json' -d '{"approve":true}'
 ```
 
@@ -52,35 +68,35 @@ curl -sX POST localhost:8080/v1/refund-requests/req_123/resolve \
 
 ## Design choices
 
-- **Hand-rolled httpx Stripe client** (`app/integrations/stripe.py`), not the SDK,
-  so the form-encoding, version pin, idempotency header, and error envelope are
-  explicit. Refunds derive a deterministic idempotency key, so a retry can't
-  double-refund.
-- **Fixed lookups are parameterized Cypher**, not Text2Cypher. Rules live in code,
-  not in the graph. See `docs/architecture.md` and `docs/design-note-neo4j-vs-code.md`.
-- **Escalation is a LangGraph interrupt/resume**: the run pauses and the same run
-  resumes once a reviewer answers.
-- **Tools are visible but code-orchestrated**: `charge_lookup` / `issue_refund` are
-  real LangChain tools, but the graph calls them deterministically rather than
-  letting the model choose — a refund flow always needs the same facts, so there's
-  no LLM nondeterminism to buy. The model is never bound to `issue_refund`.
+- **The policy is enforced, not orchestrated.** Rather than a hand-wired graph
+  that calls the LLM only for text, the LLM is a real agent; the deterministic
+  policy is injected as `wrap_tool_call` middleware. Agentic where it helps,
+  rigid where it must be.
+- **Independent verification.** The guardrail re-fetches facts and never trusts the
+  model's gathered context before allowing a refund.
+- **Hand-rolled httpx Stripe client** (`app/integrations/stripe/`), not the SDK —
+  form-encoding, version pin, idempotency header, and error envelope stay explicit.
+- **Fixed graph lookups are parameterized Cypher**, not Text2Cypher.
 
 ## Layout
 
 ```
 app/
-  agent.py            RefundAgent: the graph, the nodes, submit/resolve
+  agent.py            RefundAgent (create_agent + guardrail)
+  guardrail.py        RefundGuardrail — the wrap_tool_call policy middleware
   policy.py           the deterministic guardrails (pure function)
-  models.py           domain models + graph state
-  main.py             FastAPI (health split + endpoints)
+  tools.py            order_lookup, issue_refund
+  facts.py            gather_facts (graph + Stripe)
+  models.py           domain models
+  main.py             FastAPI (chat + resume + health)
   configs/            one settings class per file
   integrations/
-    stripe/           schemas.py · client.py · tools.py (charge_lookup, issue_refund)
+    stripe/           schemas.py · client.py
     graph.py          GraphStore (Neo4j, read-only parameterized Cypher)
-  sample_data.py      the seed/test dataset
+  sample_data.py
 scripts/seed_graph.py
 infra/neo4j/          Dockerfile + fly.toml for the private Neo4j instance
-tests/                policy · stripe · full agent flow · fakes
+tests/                policy · guardrail · tools · stripe · full agent · fakes
 ```
 
 Deploy: `Dockerfile` + `fly.toml` for the service, `infra/neo4j/` for the graph.

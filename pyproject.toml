@@ -10,7 +10,9 @@ readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = [
-    # The harness. The model is "good enough"; the value is the graph around it.
+    # The harness: create_agent + middleware. The model is "good enough"; the
+    # value is the tools and the guardrail middleware around it.
+    "langchain>=1.0.0",
     "langgraph>=1.0.0",
     "langchain-core>=1.0.0",
     "langchain-fireworks>=0.3.0",
