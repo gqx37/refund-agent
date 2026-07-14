@@ -30,6 +30,11 @@ FROM orders WHERE id = :q COLLATE NOCASE OR digits(id) = digits(:q)
 LIMIT 1
 """
 
+_ALL = """
+SELECT id AS order_id, customer_id, charge_id, purchased_at, total_cents, currency
+FROM orders ORDER BY id
+"""
+
 _OWN = "SELECT COUNT(*) n, COALESCE(SUM(refunded), 0) r FROM orders WHERE customer_id = ?"
 
 # Orders belonging to any customer that shares a payment method with this one.
@@ -48,6 +53,9 @@ class SqliteFactStore:
 
     async def order_facts(self, order_id: str) -> Optional[OrderFacts]:
         return await asyncio.to_thread(self._order_facts, order_id)
+
+    async def all_orders(self) -> list[OrderFacts]:
+        return await asyncio.to_thread(self._all_orders)
 
     async def customer_risk(self, customer_id: str) -> Optional[CustomerRiskFacts]:
         return await asyncio.to_thread(self._customer_risk, customer_id)
@@ -69,16 +77,12 @@ class SqliteFactStore:
     def _order_facts(self, order_id: str) -> Optional[OrderFacts]:
         with self._connect() as conn:
             row = conn.execute(_ORDER, {"q": order_id}).fetchone()
-        if row is None:
-            return None
-        return OrderFacts(
-            order_id=row["order_id"],
-            customer_id=row["customer_id"],
-            charge_id=row["charge_id"],
-            purchase_date=_parse_dt(row["purchased_at"]),
-            order_total_cents=row["total_cents"],
-            currency=row["currency"],
-        )
+        return _to_order(row) if row else None
+
+    def _all_orders(self) -> list[OrderFacts]:
+        with self._connect() as conn:
+            rows = conn.execute(_ALL).fetchall()
+        return [_to_order(row) for row in rows]
 
     def _customer_risk(self, customer_id: str) -> Optional[CustomerRiskFacts]:
         with self._connect() as conn:
@@ -93,6 +97,17 @@ class SqliteFactStore:
             prior_refund_count=own["r"],
             linked_account_refund_rate=linked_rate,
         )
+
+
+def _to_order(row: sqlite3.Row) -> OrderFacts:
+    return OrderFacts(
+        order_id=row["order_id"],
+        customer_id=row["customer_id"],
+        charge_id=row["charge_id"],
+        purchase_date=_parse_dt(row["purchased_at"]),
+        order_total_cents=row["total_cents"],
+        currency=row["currency"],
+    )
 
 
 def _digits(value: Any) -> str:

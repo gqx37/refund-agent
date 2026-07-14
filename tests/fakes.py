@@ -46,6 +46,19 @@ class InMemoryGraphStore:
                 )
         return None
 
+    async def all_orders(self) -> list[OrderFacts]:
+        return [
+            OrderFacts(
+                order_id=o.order_id,
+                customer_id=o.customer_id,
+                charge_id=o.charge_id,
+                purchase_date=self._now - timedelta(days=o.purchased_days_ago),
+                order_total_cents=o.total_cents,
+                currency=o.currency,
+            )
+            for o in sorted(ORDERS, key=lambda o: o.order_id)
+        ]
+
     async def customer_risk(self, customer_id: str) -> Optional[CustomerRiskFacts]:
         own = [o for o in ORDERS if o.customer_id == customer_id]
         if not own:

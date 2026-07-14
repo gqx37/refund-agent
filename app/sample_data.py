@@ -70,7 +70,8 @@ ORDERS: list[DemoOrder] = [
     DemoOrder("SO-10195", _DAVE, "ch_dave_hist_2", 20, 3_000, "usd", refunded=True),
 ]
 
-# Charges served by the Stripe stub (only the scenarios that get retrieved).
+# Charges served by Stripe. Scenario charges carry their live state; the history
+# charges are fully refunded (they back the customers' refund-rate history).
 CHARGES: dict[str, DemoCharge] = {
     "ch_3PqR7aLZ2kFdE1nY8xVtBcM": DemoCharge("ch_3PqR7aLZ2kFdE1nY8xVtBcM", 2_000, 0, False, "succeeded", _ALICE),
     "ch_3PqR7aLZ2kFdE1nY0jHsKpQ": DemoCharge("ch_3PqR7aLZ2kFdE1nY0jHsKpQ", 2_000, 0, False, "succeeded", _ALICE),
@@ -80,6 +81,11 @@ CHARGES: dict[str, DemoCharge] = {
     "ch_3PqR7aLZ2kFdE1nYqZ7yWs3": DemoCharge("ch_3PqR7aLZ2kFdE1nYqZ7yWs3", 4_000, 1_500, False, "succeeded", _ALICE),
     "ch_3PqR7aLZ2kFdE1nY2tGhFa8": DemoCharge("ch_3PqR7aLZ2kFdE1nY2tGhFa8", 5_000, 0, False, "succeeded", _BOB),
     "ch_3PqR7aLZ2kFdE1nY5rKjDn4": DemoCharge("ch_3PqR7aLZ2kFdE1nY5rKjDn4", 3_000, 0, False, "succeeded", _CAROL),
+    "ch_bob_hist_1": DemoCharge("ch_bob_hist_1", 5_000, 5_000, False, "succeeded", _BOB),
+    "ch_bob_hist_2": DemoCharge("ch_bob_hist_2", 5_000, 5_000, False, "succeeded", _BOB),
+    "ch_bob_hist_3": DemoCharge("ch_bob_hist_3", 5_000, 5_000, False, "succeeded", _BOB),
+    "ch_dave_hist_1": DemoCharge("ch_dave_hist_1", 3_000, 3_000, False, "succeeded", _DAVE),
+    "ch_dave_hist_2": DemoCharge("ch_dave_hist_2", 3_000, 3_000, False, "succeeded", _DAVE),
 }
 
 LINKS: list[DemoLink] = [

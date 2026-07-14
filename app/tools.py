@@ -5,15 +5,44 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Optional
 
 from langchain.tools import tool
 
 from app.facts import gather_facts
-from app.integrations.stripe import RefundCreateParams, StripeClient, StripeError
+from app.integrations.stripe import Charge, RefundCreateParams, StripeClient, StripeError
+
+
+def _charge_state(charge: Charge) -> str:
+    if charge.disputed:
+        return "disputed"
+    if charge.amount_refunded >= charge.amount:
+        return "fully refunded"
+    if charge.amount_refunded > 0:
+        return f"partially refunded ({charge.amount_refunded} of {charge.amount} cents)"
+    return "refundable"
 
 
 def build_tools(fact_store: Any, stripe: StripeClient) -> list:
+    @tool
+    async def list_orders() -> str:
+        """List every known order with its live refund state, so the customer can
+        see which are already refunded, disputed, or still refundable."""
+        orders = await fact_store.all_orders()
+        if not orders:
+            return "There are no orders on record."
+        charges = await asyncio.gather(
+            *(stripe.retrieve_charge(o.charge_id) for o in orders), return_exceptions=True
+        )
+        lines = []
+        for order, charge in zip(orders, charges):
+            if isinstance(charge, BaseException):
+                lines.append(f"- {order.order_id}: {order.order_total_cents} cents, state unavailable")
+            else:
+                lines.append(f"- {order.order_id}: {charge.amount} cents, {_charge_state(charge)}")
+        return "\n".join(lines)
+
     @tool
     async def order_lookup(order_id: str) -> str:
         """Look up an order: its total, when it was purchased, the charge behind it,
@@ -52,4 +81,4 @@ def build_tools(fact_store: Any, stripe: StripeClient) -> list:
             return f"Stripe rejected the refund: {exc.message}"
         return f"Refunded {refund.amount / 100:.2f} {refund.currency.upper()} (refund {refund.id})."
 
-    return [order_lookup, issue_refund]
+    return [list_orders, order_lookup, issue_refund]
