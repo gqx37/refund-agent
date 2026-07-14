@@ -8,7 +8,9 @@ moments that matter.
 
 ```
                  ┌──────── create_agent loop ────────┐
-  customer ─▶ model ⇄ tools:  order_lookup (read)     │
+  customer ─▶ model ⇄ tools:  find_customer (read)    │
+                    │         list_orders  (read)      │
+                    │         order_lookup (read)      │
                     │         issue_refund (write) ──┐ │
                     │                                │ │
                     │        RefundGuardrail.wrap_tool_call
@@ -20,7 +22,8 @@ moments that matter.
 ```
 
 - **The agent** (`app/agent.py`): `create_agent(model, tools, middleware=[RefundGuardrail()])`.
-- **The tools** (`app/tools.py`): `order_lookup`, `issue_refund` — real LangChain tools.
+- **The tools** (`app/tools.py`): `find_customer` and `list_orders` (find people / see state),
+  `order_lookup`, `issue_refund` — real LangChain tools. The read tools surface live Stripe state.
 - **The guardrail** (`app/guardrail.py`): a `wrap_tool_call` middleware that intercepts
   `issue_refund`, independently re-gathers the facts, runs the policy, and allows,
   blocks, or interrupts for a human.
@@ -43,7 +46,7 @@ store), so the suite needs no keys and no services:
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -e '.[dev]'
-pytest        # 35 tests: policy, guardrail, tools, Stripe client, SQLite store, full agent
+pytest        # policy, guardrail, tools, Stripe client, SQLite store, full agent
 ```
 
 ## Chat with it for real (LangGraph Studio)
@@ -58,12 +61,15 @@ langgraph dev                 # opens Studio at .../studio/?baseUrl=http://127.0
 ```
 
 Try:
+- `I'm Alice Nguyen, can you pull up my orders?` — finds her by name, lists live state
 - `refund order SO-10432, it arrived broken` — looks it up, issues a real $20 refund
 - `refund SO-10440` — escalates (over the ceiling); approve or deny in Studio
 - `refund SO-10329` — blocked (already fully refunded)
 
+The store holds ~50 orders across every state (refundable, partially/fully refunded,
+disputed), with named customers, so several people can try refunds without re-seeding.
 The refunds show up in your Stripe test dashboard. Each turn's trace shows the model
-calling `order_lookup` then `issue_refund`, and the guardrail allowing/blocking it.
+calling the read tools then `issue_refund`, and the guardrail allowing/blocking it.
 
 ## HTTP service
 
@@ -77,7 +83,7 @@ app/
   agent.py            RefundAgent (create_agent + guardrail)
   guardrail.py        RefundGuardrail — the wrap_tool_call policy middleware
   policy.py           the deterministic guardrails (pure function)
-  tools.py            order_lookup, issue_refund
+  tools.py            find_customer, list_orders, order_lookup, issue_refund
   facts.py            gather_facts (store + Stripe)
   models.py           domain models
   main.py             FastAPI (chat + resume + health)

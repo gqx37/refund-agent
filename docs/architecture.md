@@ -15,11 +15,12 @@ as middleware. Two ideas:
 
 ## Components
 
-- **`app/agent.py`** — `create_agent(model, tools=[order_lookup, issue_refund],
-  middleware=[RefundGuardrail(...)])`. The model converses, looks orders up, and
-  decides when to refund.
-- **`app/tools.py`** — the tools. `order_lookup` (read) gives the model situational
-  awareness; `issue_refund` (write) performs the refund.
+- **`app/agent.py`** — `create_agent(model, tools=[find_customer, list_orders,
+  order_lookup, issue_refund], middleware=[RefundGuardrail(...)])`. The model
+  converses, finds the customer/order, and decides when to refund.
+- **`app/tools.py`** — the tools. `find_customer` (by name/email), `list_orders`, and
+  `order_lookup` are reads that give the model situational awareness (with live Stripe
+  state); `issue_refund` (write) performs the refund.
 - **`app/guardrail.py`** — `RefundGuardrail(AgentMiddleware)`. Its `awrap_tool_call`
   intercepts `issue_refund`, re-gathers the authoritative facts, runs
   `policy.evaluate`, and returns:
