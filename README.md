@@ -38,6 +38,17 @@ moments that matter.
 The guardrail doesn't trust what the model gathered — it re-verifies against SQLite
 and Stripe at the instant of the action.
 
+## Try it live
+
+**[refund-agent.fly.dev](https://refund-agent.fly.dev)** — a hosted chat UI, one URL, no setup.
+Every turn shows the agent's tool calls and the guardrail decision (approve / deny /
+escalate); on an escalation you get Approve / Deny buttons. Refunds are real Stripe
+**test mode**. Try: *"I'm Alice Nguyen, show my orders"*, *"refund SO-10432, it arrived
+broken"*, *"refund SO-10440 in full"* (escalates), *"refund SO-10377"* (disputed, blocked).
+
+Runs as one small Fly machine — FastAPI serving both the API and the UI, SQLite on a
+tiny volume, suspends to ~$0 when idle.
+
 ## Run the tests, no keys
 
 Everything runs on fakes (a scripted model, a fake Stripe transport, an in-memory

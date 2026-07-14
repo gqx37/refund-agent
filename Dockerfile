@@ -36,6 +36,10 @@ WORKDIR /home/app
 COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir /wheels/*.whl && rm -rf /wheels
 
+# Seed script (not part of the wheel) so `flyctl ssh console -C "python -m scripts.seed"`
+# can populate the volume with real Stripe test charges after a deploy.
+COPY --chown=app:app scripts ./scripts
+
 USER app
 EXPOSE 8080
 
