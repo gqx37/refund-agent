@@ -22,9 +22,12 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE TABLE IF NOT EXISTS payment_methods (fingerprint TEXT, customer_id TEXT);
 """
 
+# Forgiving lookup: an exact (case-insensitive) id, or the same digits — so
+# "SO-10432", "so-10432", and a bare "10432" all resolve to the same order.
 _ORDER = """
 SELECT id AS order_id, customer_id, charge_id, purchased_at, total_cents, currency
-FROM orders WHERE id = ?
+FROM orders WHERE id = :q COLLATE NOCASE OR digits(id) = digits(:q)
+LIMIT 1
 """
 
 _OWN = "SELECT COUNT(*) n, COALESCE(SUM(refunded), 0) r FROM orders WHERE customer_id = ?"
@@ -60,11 +63,12 @@ class SqliteFactStore:
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._path)
         conn.row_factory = sqlite3.Row
+        conn.create_function("digits", 1, _digits, deterministic=True)
         return conn
 
     def _order_facts(self, order_id: str) -> Optional[OrderFacts]:
         with self._connect() as conn:
-            row = conn.execute(_ORDER, (order_id,)).fetchone()
+            row = conn.execute(_ORDER, {"q": order_id}).fetchone()
         if row is None:
             return None
         return OrderFacts(
@@ -89,6 +93,10 @@ class SqliteFactStore:
             prior_refund_count=own["r"],
             linked_account_refund_rate=linked_rate,
         )
+
+
+def _digits(value: Any) -> str:
+    return "".join(c for c in str(value) if c.isdigit())
 
 
 def _parse_dt(value: Any) -> datetime:

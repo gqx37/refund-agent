@@ -59,6 +59,12 @@ async def test_linked_account_rate(store):
     assert risk.linked_account_refund_rate > 0.6
 
 
+@pytest.mark.parametrize("typed", [ORDER_CLEAN, ORDER_CLEAN.lower(), ORDER_CLEAN.split("-")[-1]])
+async def test_order_lookup_is_forgiving(store, typed):
+    order = await store.order_facts(typed)
+    assert order is not None and order.order_id == ORDER_CLEAN
+
+
 async def test_unknown_ids_return_none(store):
     assert await store.order_facts("SO-00000") is None
     assert await store.customer_risk("cus_nope") is None

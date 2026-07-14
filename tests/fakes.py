@@ -32,8 +32,10 @@ class InMemoryGraphStore:
         self._now = now or datetime.now(timezone.utc)
 
     async def order_facts(self, order_id: str) -> Optional[OrderFacts]:
+        want = "".join(c for c in order_id if c.isdigit())
         for order in ORDERS:
-            if order.order_id == order_id:
+            same_digits = "".join(c for c in order.order_id if c.isdigit()) == want
+            if order.order_id.lower() == order_id.lower() or same_digits:
                 return OrderFacts(
                     order_id=order.order_id,
                     customer_id=order.customer_id,
