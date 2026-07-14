@@ -27,19 +27,23 @@ load_dotenv()
 
 async def _create_charge(http: httpx.AsyncClient, dc: DemoCharge) -> str:
     """Create a real Stripe test charge matching the sample's target state."""
-    payment_method = "pm_card_visa"
     if dc.disputed:
-        # A charge that Stripe marks disputed (lands asynchronously in test mode).
-        pm = await _post(http, "/v1/payment_methods", {
-            "type": "card", "card[number]": "4000000000000259",
-            "card[exp_month]": "12", "card[exp_year]": "2034", "card[cvc]": "123",
+        # Dispute test token via the legacy Charges API; the dispute lands a few
+        # seconds later, so we poll until charge.disputed is true (deterministic demo).
+        charge = await _post(http, "/v1/charges", {
+            "amount": dc.amount_cents, "currency": "usd", "source": "tok_createDispute",
         })
-        payment_method = pm["id"]
+        charge_id = charge["id"]
+        for _ in range(10):
+            await asyncio.sleep(3)
+            if (await http.get(f"/v1/charges/{charge_id}")).json().get("disputed"):
+                break
+        return charge_id
 
     pi = await _post(http, "/v1/payment_intents", {
         "amount": dc.amount_cents,
         "currency": "usd",
-        "payment_method": payment_method,
+        "payment_method": "pm_card_visa",
         "confirm": "true",
         "automatic_payment_methods[enabled]": "true",
         "automatic_payment_methods[allow_redirects]": "never",
