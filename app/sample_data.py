@@ -47,7 +47,7 @@ class DemoLink:
 
 
 # --- Curated customers (opaque ids, like Stripe's) --------------------------
-_ALICE = DemoCustomer("cus_QiT9fT2Ldm", "Alice Nguyen", "alice.nguyen@example.com")  # clean history
+_ALICE = DemoCustomer("cus_QiT9fT2Ldm", "Alice Carter", "alice.carter@example.com")  # clean history
 _BOB = DemoCustomer("cus_7Rk2Np4Xa9", "Bob Petrov", "bob.petrov@example.com")  # serial refunder
 _CAROL = DemoCustomer("cus_Nc0Ht3ZbqP", "Carol Diaz", "carol.diaz@example.com")  # looks clean alone
 _DAVE = DemoCustomer("cus_Ke5Ub8Wme2", "Dave Okafor", "dave.okafor@example.com")  # shares Carol's card

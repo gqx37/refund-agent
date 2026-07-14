@@ -9,115 +9,113 @@
     --bg: #ffffff;
     --ink: #16161a;
     --muted: #8a8a94;
-    --bubble: #f4f4f5;
-    --bubble-user: #ececee;
+    --bubble-user: #f1f1f3;
     --line: #ececee;
+    --field: #f7f7f8;
     --accent: #2f6df6;
     --ok: #12874a; --ok-bg: #eaf6ef;
     --deny: #c33; --deny-bg: #fbecec;
     --hold: #9a6a00; --hold-bg: #fbf2df;
     --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 30px rgba(0,0,0,.05);
+    --shimmer-a: #c7c7cf; --shimmer-b: #16161a;
   }
   * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
   html, body { height: 100%; }
   body {
     margin: 0; background: var(--bg); color: var(--ink);
-    font: 15.5px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font: 15.5px/1.62 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     display: flex; flex-direction: column;
   }
-  .topbar {
-    display: flex; align-items: center; gap: 9px; padding: 15px 20px;
-    position: sticky; top: 0; background: rgba(255,255,255,.85); backdrop-filter: blur(8px); z-index: 5;
-  }
-  .topbar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
-  .topbar h1 { font-size: 15px; font-weight: 640; margin: 0; letter-spacing: -.01em; }
-  .topbar .tag { font-size: 12.5px; color: var(--muted); }
+  .topbar { display: flex; align-items: center; padding: 13px 20px; position: sticky; top: 0; background: rgba(255,255,255,.86); backdrop-filter: blur(8px); z-index: 5; }
   .topbar .spacer { flex: 1; }
-  .topbar .reset { font-size: 12.5px; color: var(--muted); background: none; border: 0; cursor: pointer; padding: 4px; }
-  .topbar .reset:hover { color: var(--ink); }
+  .topbar .reset { font-size: 13px; color: var(--muted); background: none; border: 0; cursor: pointer; padding: 5px 8px; border-radius: 8px; }
+  .topbar .reset:hover { color: var(--ink); background: var(--field); }
 
   main { flex: 1; overflow-y: auto; }
-  .thread { max-width: 720px; margin: 0 auto; padding: 8px 20px 24px; display: flex; flex-direction: column; gap: 18px; }
+  .thread { max-width: 760px; margin: 0 auto; padding: 6px 20px 24px; display: flex; flex-direction: column; gap: 20px; }
 
   /* Empty state */
-  .empty { text-align: center; padding: 12vh 8px 0; color: var(--ink); }
-  .empty h2 { font-size: 22px; font-weight: 660; letter-spacing: -.02em; margin: 0 0 6px; }
-  .empty p { color: var(--muted); margin: 0 0 22px; }
-  .suggest { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .empty { text-align: center; padding: 13vh 8px 0; }
+  .empty h2 { font-size: 26px; font-weight: 680; letter-spacing: -.02em; margin: 0 0 8px; }
+  .empty p { color: var(--muted); margin: 0 auto 24px; max-width: 420px; }
+  .suggest { display: grid; grid-template-columns: 1fr; gap: 9px; max-width: 520px; margin: 0 auto; }
+  @media (min-width: 620px) { .suggest { grid-template-columns: 1fr 1fr; } }
   .suggest button {
-    font-size: 13.5px; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
-    border-radius: 999px; padding: 8px 14px; cursor: pointer; transition: border-color .15s, transform .05s;
+    font-size: 14px; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+    border-radius: 13px; padding: 12px 15px; cursor: pointer; text-align: left; transition: border-color .15s, background .15s;
   }
-  .suggest button:hover { border-color: var(--accent); }
-  .suggest button:active { transform: translateY(1px); }
+  .suggest button:hover { border-color: var(--accent); background: var(--field); }
 
-  .msg { display: flex; flex-direction: column; gap: 8px; }
+  .msg { display: flex; flex-direction: column; gap: 9px; }
   .msg.user { align-items: flex-end; }
-  .bubble { padding: 11px 15px; border-radius: 16px; max-width: 82%; white-space: pre-wrap; word-wrap: break-word; }
-  .msg.user .bubble { background: var(--bubble-user); border-bottom-right-radius: 6px; }
-  .msg.assistant { align-items: flex-start; }
-  .msg.assistant .body { max-width: 88%; display: flex; flex-direction: column; gap: 9px; }
+  .msg.user .bubble { background: var(--bubble-user); padding: 11px 15px; border-radius: 16px; border-bottom-right-radius: 6px; max-width: 82%; white-space: pre-wrap; word-wrap: break-word; }
+  .msg.assistant .body { max-width: 100%; display: flex; flex-direction: column; gap: 10px; }
 
-  /* Tool chips */
-  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  /* Tool chips (clickable to expand detail) */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tool { display: flex; flex-direction: column; gap: 0; }
   .chip {
-    display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink);
-    background: var(--bubble); border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px 5px 9px;
-    animation: pop .18s ease-out;
+    display: inline-flex; align-items: center; gap: 7px; font: inherit; font-size: 12.5px;
+    color: var(--ink); background: var(--field); border: 1px solid var(--line); border-radius: 999px;
+    padding: 5px 11px 5px 10px; cursor: pointer; animation: pop .18s ease-out; line-height: 1;
   }
-  .chip svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; opacity: .8; }
-  .chip.pending { color: var(--muted); }
-  .chip.pending .spin { width: 11px; height: 11px; border: 2px solid var(--line); border-top-color: var(--muted); border-radius: 50%; animation: spin .7s linear infinite; }
+  .chip:hover { border-color: #d7d7dc; }
+  .chip svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; opacity: .85; }
+  .chip .spin { width: 11px; height: 11px; border: 2px solid #d9d9df; border-top-color: var(--muted); border-radius: 50%; animation: spin .7s linear infinite; }
+  .chip .caret { width: 11px; height: 11px; opacity: .5; transition: transform .18s; }
+  .tool.open .chip .caret { transform: rotate(180deg); }
   .chip.approve { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
   .chip.deny { color: var(--deny); background: var(--deny-bg); border-color: transparent; }
   .chip.hold { color: var(--hold); background: var(--hold-bg); border-color: transparent; }
+  .detail { margin-top: 7px; border: 1px solid var(--line); border-radius: 12px; background: var(--field); padding: 10px 12px; font-size: 12.5px; max-width: 560px; }
+  .detail .kv { display: flex; gap: 8px; }
+  .detail .kv + .kv { margin-top: 7px; }
+  .detail .k { color: var(--muted); flex: none; width: 46px; }
+  .detail .v { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; color: var(--ink); }
   @keyframes pop { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: scale(1); } }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* Assistant text + streaming shimmer */
-  .text { background: var(--bubble); padding: 12px 16px; border-radius: 16px; border-bottom-left-radius: 6px; white-space: pre-wrap; word-wrap: break-word; min-height: 6px; }
-  .text.hold { background: var(--hold-bg); }
-  .text.streaming {
-    background-image: linear-gradient(100deg, var(--ink) 30%, var(--muted) 50%, var(--ink) 70%);
-    background-size: 220% 100%; -webkit-background-clip: text; background-clip: text;
-    -webkit-text-fill-color: transparent; color: transparent; animation: sweep 1.5s linear infinite;
+  /* Loading shimmer (SurfBuddy style: gradient swept across clipped text) */
+  .status { font-size: 15px; width: max-content; }
+  .shimmer {
+    color: transparent; -webkit-text-fill-color: transparent;
+    background-image: linear-gradient(100deg, var(--shimmer-a) 38%, var(--shimmer-b) 50%, var(--shimmer-a) 62%);
+    background-size: 220% 100%; background-repeat: no-repeat;
+    -webkit-background-clip: text; background-clip: text;
+    animation: shimmer 1.35s linear infinite;
   }
-  @keyframes sweep { to { background-position: -220% 0; } }
-  .cursor { display: inline-block; width: 7px; height: 1.05em; vertical-align: -2px; background: var(--muted); border-radius: 2px; margin-left: 2px; animation: blink 1s steps(2) infinite; }
-  @keyframes blink { 50% { opacity: 0; } }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -120% 0; } }
 
-  .meta { display: flex; gap: 4px; padding-left: 4px; opacity: 0; transition: opacity .15s; }
+  /* Assistant answer: plain on white, markdown */
+  .md { color: var(--ink); }
+  .md p { margin: 0 0 10px; }
+  .md p:last-child, .md ul:last-child, .md ol:last-child { margin-bottom: 0; }
+  .md ul, .md ol { margin: 0 0 10px; padding-left: 22px; }
+  .md li { margin: 2px 0; }
+  .md li::marker { color: var(--muted); }
+  .md strong { font-weight: 660; }
+  .md code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; background: var(--field); padding: 1px 5px; border-radius: 5px; }
+  .md h3, .md h4 { font-size: 15.5px; font-weight: 660; margin: 4px 0 6px; }
+  .md.escalated { border-left: 3px solid var(--hold); padding-left: 13px; }
+
+  .meta { display: flex; gap: 4px; margin-top: -2px; opacity: 0; transition: opacity .15s; }
   .msg.assistant:hover .meta { opacity: 1; }
-  .meta button { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); background: none; border: 0; cursor: pointer; padding: 3px 6px; border-radius: 7px; }
-  .meta button:hover { background: var(--bubble); color: var(--ink); }
+  .meta button { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 12px; color: var(--muted); background: none; border: 0; cursor: pointer; padding: 3px 7px; border-radius: 7px; }
+  .meta button:hover { background: var(--field); color: var(--ink); }
   .meta svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
   /* Composer */
-  footer { padding: 10px 20px calc(14px + env(safe-area-inset-bottom)); background: linear-gradient(to top, var(--bg) 68%, transparent); position: sticky; bottom: 0; }
-  .composer { max-width: 720px; margin: 0 auto; display: flex; align-items: flex-end; gap: 8px;
-    background: var(--bg); border: 1px solid var(--line); border-radius: 22px; padding: 6px 6px 6px 16px; box-shadow: var(--shadow); }
-  .composer textarea {
-    flex: 1; border: 0; outline: 0; resize: none; background: none; color: var(--ink); font: inherit;
-    padding: 8px 0; max-height: 140px; line-height: 1.5;
-  }
-  .composer .send {
-    flex: none; width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--accent); color: #fff;
-    display: grid; place-items: center; cursor: pointer; transition: opacity .15s, transform .05s;
-  }
-  .composer .send:disabled { opacity: .3; cursor: default; }
-  .composer .send:not(:disabled):active { transform: scale(.94); }
+  footer { padding: 8px 20px calc(16px + env(safe-area-inset-bottom)); background: linear-gradient(to top, var(--bg) 72%, transparent); position: sticky; bottom: 0; }
+  .composer { max-width: 760px; margin: 0 auto; display: flex; align-items: flex-end; gap: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 22px; padding: 7px 7px 7px 17px; box-shadow: var(--shadow); }
+  .composer textarea { flex: 1; border: 0; outline: 0; resize: none; background: none; color: var(--ink); font: inherit; padding: 8px 0; max-height: 150px; line-height: 1.5; }
+  .composer .send { flex: none; width: 40px; height: 34px; border-radius: 12px; border: 0; background: var(--accent); color: #fff; display: grid; place-items: center; cursor: pointer; transition: opacity .15s, transform .05s; }
+  .composer .send:disabled { opacity: .32; cursor: default; }
+  .composer .send:not(:disabled):active { transform: scale(.95); }
   .composer .send svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  .hint { max-width: 720px; margin: 7px auto 0; text-align: center; font-size: 11.5px; color: var(--muted); }
 </style>
 </head>
 <body>
-  <div class="topbar">
-    <span class="dot"></span>
-    <h1>Refund Agent</h1>
-    <span class="tag">policy guardrail on every refund</span>
-    <span class="spacer"></span>
-    <button class="reset" onclick="resetChat()">New chat</button>
-  </div>
+  <div class="topbar"><span class="spacer"></span><button class="reset" onclick="resetChat()">New chat</button></div>
 
   <main><div class="thread" id="thread"></div></main>
 
@@ -128,12 +126,11 @@
         <svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
       </button>
     </form>
-    <div class="hint">Real Stripe test mode &middot; refunds over policy limits ask for a typed <b>approve</b> / <b>deny</b></div>
   </footer>
 
 <script>
 const SUGGEST = [
-  "I'm Alice Nguyen, show my orders",
+  "I'm Alice Carter, show my orders",
   "Refund SO-10432, it arrived broken",
   "Refund SO-10440 in full",
   "Refund SO-10377",
@@ -145,12 +142,8 @@ const ICONS = {
   order_lookup:  '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.2"/><path d="M20 20l-3.6-3.6M9 9h4M9 12h4"/></svg>',
   issue_refund:  '<svg viewBox="0 0 24 24"><path d="M9 7H6a3 3 0 0 0-3 3v0a3 3 0 0 0 3 3h9a3 3 0 0 1 3 3v0a3 3 0 0 1-3 3h-3"/><path d="M12 4 9 7l3 3"/></svg>',
 };
-const LABELS = {
-  find_customer: "Finding your account",
-  list_orders:   "Pulling up orders",
-  order_lookup:  "Checking the order",
-  issue_refund:  "Processing refund",
-};
+const LABELS = { find_customer: "Finding your account", list_orders: "Pulling up orders", order_lookup: "Checking the order", issue_refund: "Processing refund" };
+const CARET = '<svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
 const COPY_ICON = '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
 const CHECK_ICON = '<svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10"/></svg>';
 
@@ -164,15 +157,36 @@ function esc(s){ return (s??"").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",
 function el(html){ const t=document.createElement("template"); t.innerHTML=html.trim(); return t.content.firstChild; }
 function scroll(){ const m=document.querySelector("main"); m.scrollTop=m.scrollHeight; }
 
+// Minimal, safe markdown: escape first, then bold / italic / code / lists / headings.
+function md(src){
+  const inline = s => esc(s)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*])\*(?!\s)([^*\n]+?)\*(?!\*)/g, "$1<em>$2</em>")
+    .replace(/`([^`]+?)`/g, "<code>$1</code>");
+  const lines = (src||"").replace(/\r/g,"").split("\n");
+  let out="", i=0;
+  const listRe = /^\s*([-*]|\d+\.)\s+/;
+  while(i < lines.length){
+    if(/^\s*[-*]\s+/.test(lines[i])){ out+="<ul>"; while(i<lines.length && /^\s*[-*]\s+/.test(lines[i])){ out+="<li>"+inline(lines[i].replace(/^\s*[-*]\s+/,""))+"</li>"; i++; } out+="</ul>"; continue; }
+    if(/^\s*\d+\.\s+/.test(lines[i])){ out+="<ol>"; while(i<lines.length && /^\s*\d+\.\s+/.test(lines[i])){ out+="<li>"+inline(lines[i].replace(/^\s*\d+\.\s+/,""))+"</li>"; i++; } out+="</ol>"; continue; }
+    const h = lines[i].match(/^(#{1,3})\s+(.*)/);
+    if(h){ out+="<h4>"+inline(h[2])+"</h4>"; i++; continue; }
+    if(lines[i].trim()===""){ i++; continue; }
+    const para=[]; while(i<lines.length && lines[i].trim()!=="" && !listRe.test(lines[i]) && !/^#{1,3}\s+/.test(lines[i])){ para.push(lines[i]); i++; }
+    out+="<p>"+para.map(inline).join("<br>")+"</p>";
+  }
+  return out;
+}
+
 function renderEmpty(){
-  const wrap = el(`<div class="empty"><h2>How can I help with your refund?</h2>
+  const wrap = el(`<div class="empty"><h2>Refund Agent</h2>
     <p>Look up an order or customer, then request a refund. Policy is checked on every one.</p>
     <div class="suggest"></div></div>`);
   const box = wrap.querySelector(".suggest");
   SUGGEST.forEach(s => { const b=el(`<button>${esc(s)}</button>`); b.onclick=()=>{ input.value=s; submit(); }; box.appendChild(b); });
   thread.appendChild(wrap);
 }
-function clearEmpty(){ const e=thread.querySelector(".empty"); if(e) e.remove(); }
+function clearEmpty(){ thread.querySelector(".empty")?.remove(); }
 function resetChat(){ threadId=null; thread.innerHTML=""; renderEmpty(); input.focus(); }
 
 function addUser(text){
@@ -181,50 +195,58 @@ function addUser(text){
   scroll();
 }
 
-// One assistant turn: chip row + streaming text + copy affordance.
 function newAssistant(){
   const node = el(`<div class="msg assistant"><div class="body">
       <div class="chips" hidden></div>
-      <div class="text streaming"><span class="cursor"></span></div>
+      <div class="status shimmer">Thinking</div>
+      <div class="text md" hidden></div>
       <div class="meta" hidden></div>
     </div></div>`);
   thread.appendChild(node);
   const chips = node.querySelector(".chips");
+  const status = node.querySelector(".status");
   const text = node.querySelector(".text");
   const meta = node.querySelector(".meta");
   const toolEls = {};
   let raw = "";
 
-  function addTool(name){
+  function addTool(name, args){
     chips.hidden = false;
-    const icon = ICONS[name] || "";
-    const chipEl = el(`<span class="chip pending" data-tool="${name}">${icon}<span class="lbl">${esc(LABELS[name]||name)}</span><span class="spin"></span></span>`);
-    chips.appendChild(chipEl);
-    (toolEls[name] = toolEls[name] || []).push(chipEl);
+    const wrap = el(`<div class="tool"><button class="chip pending" type="button">${ICONS[name]||""}<span class="lbl">${esc(LABELS[name]||name)}</span><span class="spin"></span></button><div class="detail" hidden></div></div>`);
+    const chip = wrap.querySelector(".chip"), detail = wrap.querySelector(".detail");
+    const rec = { chip, detail, wrap, args: args||{}, result: null };
+    chip.onclick = () => { const open = detail.hasAttribute("hidden"); renderDetail(rec); detail.toggleAttribute("hidden", !open); wrap.classList.toggle("open", open); scroll(); };
+    chips.appendChild(wrap);
+    (toolEls[name] = toolEls[name] || []).push(rec);
     scroll();
+    return rec;
   }
-  function finishTool(name, guardrail){
+  function renderDetail(rec){
+    const argStr = Object.entries(rec.args).filter(([,v]) => v!==null&&v!==undefined&&v!=="").map(([k,v]) => `${k}: ${v}`).join("\n") || "none";
+    rec.detail.innerHTML = `<div class="kv"><span class="k">input</span><span class="v">${esc(argStr)}</span></div>`
+      + (rec.result ? `<div class="kv"><span class="k">result</span><span class="v">${esc(rec.result)}</span></div>` : "");
+  }
+  function finishTool(name, guardrail, content){
     if(!name) return;
-    let list = toolEls[name];
-    if(!list || !list.length){ addTool(name); list = toolEls[name]; }  // result with no prior chip (resume turn)
-    const chipEl = list[list.length-1];
-    chipEl.querySelector(".spin")?.remove();
-    chipEl.classList.remove("pending");
+    let list = toolEls[name]; let rec;
+    if(!list || !list.length){ rec = addTool(name, {}); } else { rec = list[list.length-1]; }
+    rec.result = content || rec.result;
+    rec.chip.querySelector(".spin")?.remove();
+    rec.chip.classList.remove("pending");
+    rec.chip.appendChild(el(CARET));
     if(name === "issue_refund"){
-      if(guardrail === "approve"){ chipEl.classList.add("approve"); chipEl.querySelector(".lbl").textContent = "Refund approved"; }
-      else if(guardrail === "deny"){ chipEl.classList.add("deny"); chipEl.querySelector(".lbl").textContent = "Blocked by policy"; }
+      if(guardrail === "approve"){ rec.chip.classList.add("approve"); rec.chip.querySelector(".lbl").textContent = "Refund approved"; }
+      else if(guardrail === "deny"){ rec.chip.classList.add("deny"); rec.chip.querySelector(".lbl").textContent = "Blocked by policy"; }
     }
+    if(!rec.detail.hasAttribute("hidden")) renderDetail(rec);
   }
-  function token(t){ raw += t; text.textContent = raw; scroll(); }
-  function hold(){ // escalation pending: mark the refund chip as held for review
-    const list = toolEls["issue_refund"]; if(list&&list.length){ const c=list[list.length-1]; c.querySelector(".spin")?.remove(); c.classList.remove("pending"); c.classList.add("hold"); c.querySelector(".lbl").textContent = "Held for review"; }
-    text.classList.add("hold");
-  }
-  function fill(t){ raw = t; text.textContent = t; }
+  function showText(){ status.hidden = true; text.hidden = false; }
+  function token(t){ raw += t; showText(); text.innerHTML = md(raw); scroll(); }
+  function fill(t, {escalated=false}={}){ raw = t; showText(); text.innerHTML = md(t); if(escalated) text.classList.add("escalated"); scroll(); }
+  function hold(){ const list = toolEls["issue_refund"]; if(list&&list.length){ const r=list[list.length-1]; r.chip.querySelector(".spin")?.remove(); r.chip.classList.remove("pending"); r.chip.classList.add("hold"); r.chip.querySelector(".lbl").textContent="Held for review"; r.chip.appendChild(el(CARET)); } }
   function done(){
-    text.classList.remove("streaming");
-    text.querySelector(".cursor")?.remove();
-    if(!raw){ text.remove(); } // no answer (e.g. pure escalation handled elsewhere)
+    status.remove();
+    if(!raw){ text.remove(); }
     else {
       meta.hidden = false;
       const copy = el(`<button title="Copy">${COPY_ICON}<span>Copy</span></button>`);
@@ -233,13 +255,13 @@ function newAssistant(){
     }
     scroll();
   }
-  return { addTool, finishTool, token, hold, fill, done, get raw(){ return raw; } };
+  return { addTool, finishTool, token, fill, hold, done, get raw(){ return raw; } };
 }
 
 function escalationCopy(review){
   const amount = (review.amount_cents/100).toLocaleString(undefined,{style:"currency",currency:"USD"});
   const reason = (review.policy_reasons||[]).slice(-1)[0] || "it needs a second look";
-  return `This one needs a quick human sign-off before it goes through: ${amount} on ${review.order_id}. ${reason}\n\nReply approve to release the refund, or deny to hold it.`;
+  return `This one needs a quick human sign-off before it goes through: **${amount}** on **${review.order_id}**. ${reason}\n\nReply **approve** to release the refund, or **deny** to hold it.`;
 }
 
 function setBusy(b){ busy=b; updateSend(); input.disabled=b; if(!b) input.focus(); }
@@ -259,27 +281,25 @@ async function submit(){
       let i;
       while((i = buf.indexOf("\n\n")) >= 0){
         const line = buf.slice(0, i).trim(); buf = buf.slice(i+2);
-        if(!line.startsWith("data:")) continue;
-        handle(JSON.parse(line.slice(5).trim()), turn);
+        if(line.startsWith("data:")) handle(JSON.parse(line.slice(5).trim()), turn);
       }
     }
-  } catch(e){
-    turn.fill("Sorry, the connection dropped. Please try again.");
-  } finally { turn.done(); setBusy(false); }
+  } catch(e){ turn.fill("Sorry, the connection dropped. Please try again."); }
+  finally { turn.done(); setBusy(false); }
 }
 
 function handle(ev, turn){
   switch(ev.type){
     case "thread": threadId = ev.thread_id; break;
-    case "tool": turn.addTool(ev.name); break;
-    case "tool_result": turn.finishTool(ev.name, ev.guardrail); break;
+    case "tool": turn.addTool(ev.name, ev.args); break;
+    case "tool_result": turn.finishTool(ev.name, ev.guardrail, ev.content); break;
     case "token": turn.token(ev.text); break;
-    case "escalated": turn.hold(); turn.fill(escalationCopy(ev.review)); break;
+    case "escalated": turn.hold(); turn.fill(escalationCopy(ev.review), {escalated:true}); break;
     case "error": turn.fill(ev.message); break;
   }
 }
 
-function autosize(){ input.style.height="auto"; input.style.height = Math.min(input.scrollHeight, 140)+"px"; }
+function autosize(){ input.style.height="auto"; input.style.height = Math.min(input.scrollHeight, 150)+"px"; }
 input.addEventListener("input", () => { autosize(); updateSend(); });
 input.addEventListener("keydown", e => { if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); submit(); } });
 form.addEventListener("submit", e => { e.preventDefault(); submit(); });

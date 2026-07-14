@@ -41,10 +41,10 @@ and Stripe at the instant of the action.
 ## Try it live
 
 **[refund-agent.fly.dev](https://refund-agent.fly.dev)** — a hosted chat UI, one URL, no setup.
-Every turn shows the agent's tool calls and the guardrail decision (approve / deny /
-escalate); on an escalation you get Approve / Deny buttons. Refunds are real Stripe
-**test mode**. Try: *"I'm Alice Nguyen, show my orders"*, *"refund SO-10432, it arrived
-broken"*, *"refund SO-10440 in full"* (escalates), *"refund SO-10377"* (disputed, blocked).
+Responses stream in; each turn shows clickable tool chips and the guardrail decision
+(approve / deny / escalate). An escalation asks you to type **approve** or **deny**.
+Refunds are real Stripe **test mode**. Try: *"I'm Alice Carter, show my orders"*, *"refund
+SO-10432, it arrived broken"*, *"refund SO-10440 in full"* (escalates), *"refund SO-10377"* (disputed, blocked).
 
 Runs as one small Fly machine — FastAPI serving both the API and the UI, SQLite on a
 tiny volume, suspends to ~$0 when idle.
@@ -72,7 +72,7 @@ langgraph dev                 # opens Studio at .../studio/?baseUrl=http://127.0
 ```
 
 Try:
-- `I'm Alice Nguyen, can you pull up my orders?` — finds her by name, lists live state
+- `I'm Alice Carter, can you pull up my orders?` — finds her by name, lists live state
 - `refund order SO-10432, it arrived broken` — looks it up, issues a real $20 refund
 - `refund SO-10440` — escalates (over the ceiling); approve or deny in Studio
 - `refund SO-10329` — blocked (already fully refunded)

@@ -77,13 +77,13 @@ async def test_order_lookup_is_forgiving(store, typed):
 
 async def test_order_carries_customer_identity(store):
     order = await store.order_facts(ORDER_CLEAN)
-    assert order.customer_name == "Alice Nguyen"
-    assert order.customer_email == "alice.nguyen@example.com"
+    assert order.customer_name == "Alice Carter"
+    assert order.customer_email == "alice.carter@example.com"
 
 
 async def test_find_customers_by_name_and_email(store):
     by_name = await store.find_customers("alice")
-    assert any(c.email == "alice.nguyen@example.com" for c in by_name)
+    assert any(c.email == "alice.carter@example.com" for c in by_name)
     by_email = await store.find_customers("bob.petrov@example.com")
     assert [c.name for c in by_email] == ["Bob Petrov"]
     orders = await store.orders_for_customer(by_email[0].id)

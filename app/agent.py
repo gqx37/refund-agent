@@ -149,7 +149,7 @@ class RefundAgent:
                                 guardrail = "approve"
                             elif content.startswith("Refund not issued"):
                                 guardrail = "deny"
-                        yield {"type": "tool_result", "name": name, "guardrail": guardrail}
+                        yield {"type": "tool_result", "name": name, "guardrail": guardrail, "content": content}
         yield {"type": "done"}
 
     async def verify(self) -> None:
