@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "refund-agent"
 version = "0.1.0"
-description = "A policy-constrained refund agent for Stripe: deterministic guardrails in code, semantic facts in a graph, an LLM harness on top."
+description = "A policy-constrained refund agent for Stripe: a tool-using LLM with a deterministic policy guardrail wired in as middleware."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
@@ -24,9 +24,8 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "structlog>=24.4.0",
     # Integrations. Stripe is a hand-rolled httpx client (no stripe SDK on purpose,
-    # see app/integrations/stripe/client.py). Neo4j holds the semantic facts.
+    # see app/integrations/stripe/client.py). Facts live in embedded SQLite (stdlib).
     "httpx>=0.27.0",
-    "neo4j>=5.24.0,<6.0.0",
 ]
 
 [project.optional-dependencies]

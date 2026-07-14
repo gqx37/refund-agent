@@ -6,10 +6,12 @@ from __future__ import annotations
 
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Response, status
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from app.agent import RefundAgent
@@ -18,6 +20,7 @@ from app.logging import configure, get_logger
 
 load_dotenv()
 log = get_logger()
+_INDEX_HTML = (Path(__file__).parent / "web" / "index.html").read_text()
 
 
 @asynccontextmanager
@@ -42,6 +45,11 @@ class ChatBody(BaseModel):
 
 class ResolveBody(BaseModel):
     approve: bool
+
+
+@app.get("/", include_in_schema=False)
+async def index() -> HTMLResponse:
+    return HTMLResponse(_INDEX_HTML)
 
 
 @app.get("/health", include_in_schema=False)

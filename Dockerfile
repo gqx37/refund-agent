@@ -39,8 +39,8 @@ RUN pip install --no-cache-dir /wheels/*.whl && rm -rf /wheels
 USER app
 EXPOSE 8080
 
-# Liveness only — readiness (which touches Neo4j) is polled by the load balancer,
-# not the container healthcheck, so a graph outage never restarts the machine.
+# Liveness only — readiness (which touches the store) is polled by the load
+# balancer, not the container healthcheck, so a store hiccup never restarts the machine.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:${PORT}/health || exit 1
 

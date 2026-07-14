@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from langchain.agents import create_agent
+from langchain.messages import ToolMessage
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -126,9 +127,38 @@ class RefundAgent:
 
     @staticmethod
     def _interpret(result: dict) -> dict:
+        messages = result.get("messages", [])
+        trace = RefundAgent._trace(messages)
         interrupts = result.get("__interrupt__")
         if interrupts:
-            return {"status": "escalated", "review": getattr(interrupts[0], "value", interrupts[0])}
-        messages = result.get("messages", [])
+            review = getattr(interrupts[0], "value", interrupts[0])
+            return {"status": "escalated", "review": review, "trace": trace}
         reply = messages[-1].content if messages else ""
-        return {"status": "replied", "reply": reply}
+        return {"status": "replied", "reply": reply, "trace": trace}
+
+    @staticmethod
+    def _trace(messages: list) -> list[dict]:
+        """The turn's tool calls, each tagged with the guardrail outcome on
+        issue_refund (approve ran it, deny blocked it, escalate is pending review).
+        This is what the UI's guardrail panel renders."""
+        results = {
+            m.tool_call_id: str(m.content)
+            for m in messages
+            if isinstance(m, ToolMessage)
+        }
+        steps: list[dict] = []
+        for m in messages:
+            for call in getattr(m, "tool_calls", None) or []:
+                result = results.get(call["id"])
+                guardrail = None
+                if call["name"] == "issue_refund":
+                    if result is None:
+                        guardrail = "escalate"
+                    elif result.startswith("Refund not issued"):
+                        guardrail = "deny"
+                    else:
+                        guardrail = "approve"
+                steps.append(
+                    {"name": call["name"], "args": call["args"], "result": result, "guardrail": guardrail}
+                )
+        return steps
