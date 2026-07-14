@@ -75,7 +75,7 @@ class RefundGuardrail(AgentMiddleware):
             "amount_cents": decision.approved_amount_cents or facts.charge.remaining_refundable_cents,
             "policy_reasons": decision.reasons,
         })
-        if isinstance(review, dict) and review.get("approve"):
+        if _approved(review):
             return await handler(request)
         return self._block(tool_call_id, "a human reviewer declined the refund")
 
@@ -83,6 +83,21 @@ class RefundGuardrail(AgentMiddleware):
     def _block(tool_call_id: str, reason: str) -> ToolMessage:
         # Fed back to the model, which then explains the outcome to the customer.
         return ToolMessage(content=f"Refund not issued: {reason}.", tool_call_id=tool_call_id)
+
+
+_APPROVE_WORDS = {"approve", "approved", "approve refund", "yes", "y", "true", "ok", "okay", "accept", "accepted", "confirm", "confirmed"}
+
+
+def _approved(review: Any) -> bool:
+    """Interpret a human's resume value flexibly. A guardrail default: anything not
+    clearly affirmative is treated as a decline (never approve on ambiguous input)."""
+    if isinstance(review, bool):
+        return review
+    if isinstance(review, dict):
+        if "approve" in review:
+            return _approved(review["approve"])
+        review = review.get("decision") or review.get("action") or review.get("response") or ""
+    return str(review).strip().lower() in _APPROVE_WORDS
 
 
 def _coerce_reason(value: Any) -> Optional[RefundReason]:

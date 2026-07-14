@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import app.guardrail as guardrail_mod
+import pytest
 from langchain.messages import ToolMessage
 from langchain.tools.tool_node import ToolCallRequest
 
@@ -78,5 +79,19 @@ async def test_escalation_approved_by_human_executes(guardrail, monkeypatch):
 
 async def test_escalation_declined_by_human_blocks(guardrail, monkeypatch):
     monkeypatch.setattr(guardrail_mod, "interrupt", lambda payload: {"approve": False})
+    result = await guardrail.awrap_tool_call(_request(ORDER_FRAUD_RING), _handler)
+    assert "human reviewer declined" in result.content
+
+
+@pytest.mark.parametrize("resume", ["approve", "Approve", "yes", " ok ", True, {"approve": "approve"}])
+async def test_flexible_approval_inputs_execute(guardrail, monkeypatch, resume):
+    monkeypatch.setattr(guardrail_mod, "interrupt", lambda payload: resume)
+    result = await guardrail.awrap_tool_call(_request(ORDER_SERIAL_REFUNDER), _handler)
+    assert result.content == "EXECUTED"
+
+
+@pytest.mark.parametrize("resume", ["", "no", "maybe later", None, {"approve": False}, {}])
+async def test_ambiguous_or_negative_inputs_block(guardrail, monkeypatch, resume):
+    monkeypatch.setattr(guardrail_mod, "interrupt", lambda payload: resume)
     result = await guardrail.awrap_tool_call(_request(ORDER_FRAUD_RING), _handler)
     assert "human reviewer declined" in result.content
