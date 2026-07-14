@@ -16,10 +16,13 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import httpx
+from dotenv import load_dotenv
 
 from app.configs import StoreConfig
 from app.integrations.store import SCHEMA
 from app.sample_data import CHARGES, LINKS, ORDERS, DemoCharge
+
+load_dotenv()
 
 
 async def _create_charge(http: httpx.AsyncClient, dc: DemoCharge) -> str:
