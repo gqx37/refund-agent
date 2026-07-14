@@ -9,7 +9,14 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.integrations.store import SCHEMA, SqliteFactStore
-from app.sample_data import LINKS, ORDER_CLEAN, ORDER_FRAUD_RING, ORDER_SERIAL_REFUNDER, ORDERS
+from app.sample_data import (
+    CUSTOMERS,
+    LINKS,
+    ORDER_CLEAN,
+    ORDER_FRAUD_RING,
+    ORDER_SERIAL_REFUNDER,
+    ORDERS,
+)
 from tests.fakes import InMemoryGraphStore
 
 NOW = datetime(2026, 7, 14, tzinfo=timezone.utc)
@@ -29,7 +36,10 @@ def store(tmp_path) -> SqliteFactStore:
              (NOW - timedelta(days=o.purchased_days_ago)).isoformat(),
              o.total_cents, o.currency, int(o.refunded)),
         )
-    conn.executemany("INSERT INTO customers (id) VALUES (?)", [(c,) for c in customers])
+    conn.executemany(
+        "INSERT INTO customers (id, name, email) VALUES (?,?,?)",
+        [(CUSTOMERS[c].id, CUSTOMERS[c].name, CUSTOMERS[c].email) for c in customers],
+    )
     for link in LINKS:
         conn.executemany("INSERT INTO payment_methods VALUES (?,?)",
                          [(link.fingerprint, cid) for cid in link.customer_ids])
@@ -63,6 +73,21 @@ async def test_linked_account_rate(store):
 async def test_order_lookup_is_forgiving(store, typed):
     order = await store.order_facts(typed)
     assert order is not None and order.order_id == ORDER_CLEAN
+
+
+async def test_order_carries_customer_identity(store):
+    order = await store.order_facts(ORDER_CLEAN)
+    assert order.customer_name == "Alice Nguyen"
+    assert order.customer_email == "alice.nguyen@example.com"
+
+
+async def test_find_customers_by_name_and_email(store):
+    by_name = await store.find_customers("alice")
+    assert any(c.email == "alice.nguyen@example.com" for c in by_name)
+    by_email = await store.find_customers("bob.petrov@example.com")
+    assert [c.name for c in by_email] == ["Bob Petrov"]
+    orders = await store.orders_for_customer(by_email[0].id)
+    assert ORDER_SERIAL_REFUNDER in {o.order_id for o in orders}
 
 
 async def test_unknown_ids_return_none(store):

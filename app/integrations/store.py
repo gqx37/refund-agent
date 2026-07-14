@@ -11,10 +11,10 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from app.models import CustomerRiskFacts, OrderFacts
+from app.models import CustomerInfo, CustomerRiskFacts, OrderFacts
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS customers (id TEXT PRIMARY KEY, email TEXT);
+CREATE TABLE IF NOT EXISTS customers (id TEXT PRIMARY KEY, name TEXT, email TEXT);
 CREATE TABLE IF NOT EXISTS orders (
     id TEXT PRIMARY KEY, customer_id TEXT, charge_id TEXT,
     purchased_at TEXT, total_cents INTEGER, currency TEXT, refunded INTEGER
@@ -22,17 +22,25 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE TABLE IF NOT EXISTS payment_methods (fingerprint TEXT, customer_id TEXT);
 """
 
-# Forgiving lookup: an exact (case-insensitive) id, or the same digits — so
-# "SO-10432", "so-10432", and a bare "10432" all resolve to the same order.
-_ORDER = """
-SELECT id AS order_id, customer_id, charge_id, purchased_at, total_cents, currency
-FROM orders WHERE id = :q COLLATE NOCASE OR digits(id) = digits(:q)
-LIMIT 1
+_SELECT = """
+SELECT o.id AS order_id, o.customer_id, c.name AS customer_name, c.email AS customer_email,
+       o.charge_id, o.purchased_at, o.total_cents, o.currency
+FROM orders o LEFT JOIN customers c ON c.id = o.customer_id
 """
 
-_ALL = """
-SELECT id AS order_id, customer_id, charge_id, purchased_at, total_cents, currency
-FROM orders ORDER BY id
+# Forgiving lookup: an exact (case-insensitive) id, or the same digits — so
+# "SO-10432", "so-10432", and a bare "10432" all resolve to the same order.
+_ORDER = _SELECT + " WHERE o.id = :q COLLATE NOCASE OR digits(o.id) = digits(:q) LIMIT 1"
+
+_ALL = _SELECT + " ORDER BY o.id"
+
+_BY_CUSTOMER = _SELECT + " WHERE o.customer_id = ? ORDER BY o.id"
+
+# Find customers by name, email, or id (substring, case-insensitive).
+_FIND_CUSTOMERS = """
+SELECT id, name, email FROM customers
+WHERE name LIKE :q COLLATE NOCASE OR email LIKE :q COLLATE NOCASE OR id LIKE :q COLLATE NOCASE
+ORDER BY name LIMIT 10
 """
 
 _OWN = "SELECT COUNT(*) n, COALESCE(SUM(refunded), 0) r FROM orders WHERE customer_id = ?"
@@ -56,6 +64,12 @@ class SqliteFactStore:
 
     async def all_orders(self) -> list[OrderFacts]:
         return await asyncio.to_thread(self._all_orders)
+
+    async def find_customers(self, query: str) -> list[CustomerInfo]:
+        return await asyncio.to_thread(self._find_customers, query)
+
+    async def orders_for_customer(self, customer_id: str) -> list[OrderFacts]:
+        return await asyncio.to_thread(self._orders_for_customer, customer_id)
 
     async def customer_risk(self, customer_id: str) -> Optional[CustomerRiskFacts]:
         return await asyncio.to_thread(self._customer_risk, customer_id)
@@ -84,6 +98,16 @@ class SqliteFactStore:
             rows = conn.execute(_ALL).fetchall()
         return [_to_order(row) for row in rows]
 
+    def _find_customers(self, query: str) -> list[CustomerInfo]:
+        with self._connect() as conn:
+            rows = conn.execute(_FIND_CUSTOMERS, {"q": f"%{query}%"}).fetchall()
+        return [CustomerInfo(id=r["id"], name=r["name"], email=r["email"]) for r in rows]
+
+    def _orders_for_customer(self, customer_id: str) -> list[OrderFacts]:
+        with self._connect() as conn:
+            rows = conn.execute(_BY_CUSTOMER, (customer_id,)).fetchall()
+        return [_to_order(row) for row in rows]
+
     def _customer_risk(self, customer_id: str) -> Optional[CustomerRiskFacts]:
         with self._connect() as conn:
             own = conn.execute(_OWN, (customer_id,)).fetchone()
@@ -103,6 +127,8 @@ def _to_order(row: sqlite3.Row) -> OrderFacts:
     return OrderFacts(
         order_id=row["order_id"],
         customer_id=row["customer_id"],
+        customer_name=row["customer_name"],
+        customer_email=row["customer_email"],
         charge_id=row["charge_id"],
         purchase_date=_parse_dt(row["purchased_at"]),
         order_total_cents=row["total_cents"],

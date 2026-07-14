@@ -6,6 +6,17 @@ from __future__ import annotations
 from app.sample_data import ORDER_CLEAN, ORDER_DISPUTED, ORDER_FULLY_REFUNDED
 
 
+async def test_find_customer_lists_their_orders(tools):
+    text = await tools["find_customer"].ainvoke({"query": "alice"})
+    assert "Alice Nguyen" in text and "alice.nguyen@example.com" in text
+    assert ORDER_CLEAN in text
+
+
+async def test_find_customer_no_match(tools):
+    text = await tools["find_customer"].ainvoke({"query": "nobody-here"})
+    assert "No customer matched" in text
+
+
 async def test_list_orders_shows_each_state(tools):
     text = await tools["list_orders"].ainvoke({})
     assert f"- {ORDER_CLEAN}:" in text and "refundable" in text

@@ -20,7 +20,7 @@ class RefundRequest(BaseModel):
 
 
 class OrderFacts(BaseModel):
-    """From the graph."""
+    """From the store."""
 
     order_id: str
     customer_id: str
@@ -28,9 +28,19 @@ class OrderFacts(BaseModel):
     purchase_date: datetime
     order_total_cents: int
     currency: str
+    customer_name: Optional[str] = None
+    customer_email: Optional[str] = None
 
     def days_since_purchase(self, *, now: Optional[datetime] = None) -> int:
         return ((now or datetime.now(timezone.utc)) - self.purchase_date).days
+
+
+class CustomerInfo(BaseModel):
+    """A customer, for search results (name/email discovery)."""
+
+    id: str
+    name: Optional[str] = None
+    email: Optional[str] = None
 
 
 class CustomerRiskFacts(BaseModel):

@@ -24,29 +24,51 @@ def _charge_state(charge: Charge) -> str:
     return "refundable"
 
 
+async def _order_lines(fact_store: Any, stripe: StripeClient, orders: list) -> list[str]:
+    """Render orders with their live Stripe state, fetched concurrently."""
+    charges = await asyncio.gather(
+        *(stripe.retrieve_charge(o.charge_id) for o in orders), return_exceptions=True
+    )
+    lines = []
+    for order, charge in zip(orders, charges):
+        if isinstance(charge, BaseException):
+            lines.append(f"- {order.order_id}: {order.order_total_cents} cents, state unavailable")
+        else:
+            lines.append(f"- {order.order_id}: {charge.amount} cents, {_charge_state(charge)}")
+    return lines
+
+
 def build_tools(fact_store: Any, stripe: StripeClient) -> list:
     @tool
+    async def find_customer(query: str) -> str:
+        """Find customers by name, email, or id, and show each one's orders with
+        their live refund state. Use this when the customer identifies themselves by
+        name or email rather than giving an order number."""
+        customers = await fact_store.find_customers(query)
+        if not customers:
+            return f"No customer matched '{query}'."
+        blocks = []
+        for cust in customers:
+            orders = await fact_store.orders_for_customer(cust.id)
+            lines = await _order_lines(fact_store, stripe, orders)
+            header = f"{cust.name} <{cust.email}> ({cust.id})"
+            blocks.append(header + ("\n" + "\n".join(lines) if lines else "\n- no orders"))
+        return "\n\n".join(blocks)
+
+    @tool
     async def list_orders() -> str:
-        """List every known order with its live refund state, so the customer can
-        see which are already refunded, disputed, or still refundable."""
+        """List every known order with its live refund state, so you can see which
+        are already refunded, disputed, or still refundable. For a specific person,
+        prefer find_customer."""
         orders = await fact_store.all_orders()
         if not orders:
             return "There are no orders on record."
-        charges = await asyncio.gather(
-            *(stripe.retrieve_charge(o.charge_id) for o in orders), return_exceptions=True
-        )
-        lines = []
-        for order, charge in zip(orders, charges):
-            if isinstance(charge, BaseException):
-                lines.append(f"- {order.order_id}: {order.order_total_cents} cents, state unavailable")
-            else:
-                lines.append(f"- {order.order_id}: {charge.amount} cents, {_charge_state(charge)}")
-        return "\n".join(lines)
+        return "\n".join(await _order_lines(fact_store, stripe, orders))
 
     @tool
     async def order_lookup(order_id: str) -> str:
-        """Look up an order: its total, when it was purchased, the charge behind it,
-        how much is still refundable, and the customer's refund history."""
+        """Look up an order: the customer, its total, when it was purchased, the charge
+        behind it, how much is still refundable, and the customer's refund history."""
         try:
             facts = await gather_facts(fact_store, stripe, order_id)
         except StripeError as exc:
@@ -54,8 +76,9 @@ def build_tools(fact_store: Any, stripe: StripeClient) -> list:
         if facts is None:
             return f"No order '{order_id}' was found."
         c, r = facts.charge, facts.customer_risk
+        who = facts.order.customer_name or facts.order.customer_id
         return (
-            f"order {facts.order.order_id}: total {facts.order.order_total_cents} cents, "
+            f"order {facts.order.order_id} for {who}: total {facts.order.order_total_cents} cents, "
             f"purchased {facts.order.days_since_purchase()} days ago. "
             f"charge {c.charge_id}: {c.amount_cents} cents, {c.amount_refunded_cents} refunded, "
             f"{c.remaining_refundable_cents} refundable, disputed={c.disputed}, status={c.status}. "
@@ -81,4 +104,4 @@ def build_tools(fact_store: Any, stripe: StripeClient) -> list:
             return f"Stripe rejected the refund: {exc.message}"
         return f"Refunded {refund.amount / 100:.2f} {refund.currency.upper()} (refund {refund.id})."
 
-    return [list_orders, order_lookup, issue_refund]
+    return [find_customer, list_orders, order_lookup, issue_refund]

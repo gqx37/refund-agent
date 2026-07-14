@@ -12,8 +12,8 @@ from urllib.parse import parse_qsl
 import httpx
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 
-from app.models import CustomerRiskFacts, OrderFacts
-from app.sample_data import CHARGES, LINKS, ORDERS
+from app.models import CustomerInfo, CustomerRiskFacts, OrderFacts
+from app.sample_data import CHARGES, CUSTOMERS, LINKS, ORDERS
 
 
 class ScriptedModel(FakeMessagesListChatModel):
@@ -31,33 +31,40 @@ class InMemoryGraphStore:
     def __init__(self, *, now: Optional[datetime] = None) -> None:
         self._now = now or datetime.now(timezone.utc)
 
+    def _facts(self, order) -> OrderFacts:
+        cust = CUSTOMERS.get(order.customer_id)
+        return OrderFacts(
+            order_id=order.order_id,
+            customer_id=order.customer_id,
+            customer_name=cust.name if cust else None,
+            customer_email=cust.email if cust else None,
+            charge_id=order.charge_id,
+            purchase_date=self._now - timedelta(days=order.purchased_days_ago),
+            order_total_cents=order.total_cents,
+            currency=order.currency,
+        )
+
     async def order_facts(self, order_id: str) -> Optional[OrderFacts]:
         want = "".join(c for c in order_id if c.isdigit())
         for order in ORDERS:
             same_digits = "".join(c for c in order.order_id if c.isdigit()) == want
             if order.order_id.lower() == order_id.lower() or same_digits:
-                return OrderFacts(
-                    order_id=order.order_id,
-                    customer_id=order.customer_id,
-                    charge_id=order.charge_id,
-                    purchase_date=self._now - timedelta(days=order.purchased_days_ago),
-                    order_total_cents=order.total_cents,
-                    currency=order.currency,
-                )
+                return self._facts(order)
         return None
 
     async def all_orders(self) -> list[OrderFacts]:
-        return [
-            OrderFacts(
-                order_id=o.order_id,
-                customer_id=o.customer_id,
-                charge_id=o.charge_id,
-                purchase_date=self._now - timedelta(days=o.purchased_days_ago),
-                order_total_cents=o.total_cents,
-                currency=o.currency,
-            )
-            for o in sorted(ORDERS, key=lambda o: o.order_id)
+        return [self._facts(o) for o in sorted(ORDERS, key=lambda o: o.order_id)]
+
+    async def find_customers(self, query: str) -> list[CustomerInfo]:
+        q = query.lower()
+        matches = [
+            c for c in CUSTOMERS.values()
+            if q in c.name.lower() or q in c.email.lower() or q in c.id.lower()
         ]
+        return [CustomerInfo(id=c.id, name=c.name, email=c.email) for c in matches[:10]]
+
+    async def orders_for_customer(self, customer_id: str) -> list[OrderFacts]:
+        return [self._facts(o) for o in ORDERS if o.customer_id == customer_id]
 
     async def customer_risk(self, customer_id: str) -> Optional[CustomerRiskFacts]:
         own = [o for o in ORDERS if o.customer_id == customer_id]

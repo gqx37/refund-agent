@@ -20,9 +20,13 @@ from dotenv import load_dotenv
 
 from app.configs import StoreConfig
 from app.integrations.store import SCHEMA
-from app.sample_data import CHARGES, LINKS, ORDERS, DemoCharge
+from app.sample_data import CHARGES, CUSTOMERS, LINKS, ORDERS, DemoCharge
 
 load_dotenv()
+
+# Stripe test mode is fine with bursts, but keep a modest cap so ~50 charges
+# don't trip rate limits.
+_CONCURRENCY = 6
 
 
 async def _create_charge(http: httpx.AsyncClient, dc: DemoCharge) -> str:
@@ -68,23 +72,30 @@ async def seed() -> None:
     charge_map: dict[str, str] = {}
 
     if stripe_key:
+        sem = asyncio.Semaphore(_CONCURRENCY)
         async with httpx.AsyncClient(
             base_url="https://api.stripe.com",
             headers={"Authorization": f"Bearer {stripe_key}"},
-            timeout=30.0,
+            timeout=60.0,
         ) as http:
-            for sample_id, dc in CHARGES.items():
-                charge_map[sample_id] = await _create_charge(http, dc)
-                print(f"  charge {sample_id} -> {charge_map[sample_id]}")
+            async def one(sample_id: str, dc: DemoCharge) -> tuple[str, str]:
+                async with sem:
+                    real_id = await _create_charge(http, dc)
+                print(f"  charge {sample_id} -> {real_id}")
+                return sample_id, real_id
+
+            print(f"Creating {len(CHARGES)} real Stripe test charges...")
+            charge_map = dict(await asyncio.gather(*(one(sid, dc) for sid, dc in CHARGES.items())))
     else:
         print("STRIPE_API_KEY not set: using sample charge ids (issue_refund won't hit real Stripe).")
 
     now = datetime.now(timezone.utc)
     conn = sqlite3.connect(StoreConfig().db_path)
     try:
-        conn.executescript(SCHEMA)
+        # Drop and recreate so a re-seed always lands on the current schema.
         for table in ("orders", "customers", "payment_methods"):
-            conn.execute(f"DELETE FROM {table}")
+            conn.execute(f"DROP TABLE IF EXISTS {table}")
+        conn.executescript(SCHEMA)
 
         customers: set[str] = set()
         for o in ORDERS:
@@ -97,7 +108,10 @@ async def seed() -> None:
                     o.total_cents, o.currency, int(o.refunded),
                 ),
             )
-        conn.executemany("INSERT INTO customers (id) VALUES (?)", [(c,) for c in customers])
+        conn.executemany(
+            "INSERT INTO customers (id, name, email) VALUES (?,?,?)",
+            [(CUSTOMERS[c].id, CUSTOMERS[c].name, CUSTOMERS[c].email) for c in customers],
+        )
         for link in LINKS:
             conn.executemany(
                 "INSERT INTO payment_methods VALUES (?,?)",
