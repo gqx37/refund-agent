@@ -47,6 +47,26 @@ pytest        # 31 tests: policy, guardrail, tools, Stripe client, full agent fl
 escalate); `test_agent.py` drives the real `create_agent` graph end-to-end with a
 scripted model and asserts a disputed charge is never refunded.
 
+## Chat with it (LangGraph Studio)
+
+`langgraph dev` serves the agent and opens LangGraph Studio — a chat and trace UI —
+with no frontend to build. The demo graph (`demo/graph.py`) runs on the sample data
+with a fake Stripe transport, so you only need a model key and a LangSmith key, not
+real Stripe or Neo4j.
+
+```bash
+cp .env.example .env      # set FIREWORKS_API_KEY and LANGSMITH_API_KEY
+langgraph dev             # opens Studio at .../studio/?baseUrl=http://127.0.0.1:2024
+```
+
+Things to try in the chat:
+- `refund order SO-10432, it arrived broken` — looks it up, refunds $20.00
+- `refund SO-10440` — escalates (over the ceiling); approve or deny it in Studio
+- `refund SO-10377` — blocked (the charge is disputed); the agent explains why
+
+You can watch each turn's trace: the model calling `order_lookup`, then `issue_refund`,
+and the guardrail allowing, blocking, or interrupting it.
+
 ## Run it for real
 
 ```bash

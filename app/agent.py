@@ -34,6 +34,28 @@ _SYSTEM_PROMPT = (
 )
 
 
+def build_agent(
+    *,
+    model: BaseChatModel,
+    fact_store: Any,
+    stripe: StripeClient,
+    policy: RefundPolicy,
+    now: Optional[datetime] = None,
+    checkpointer: Optional[BaseCheckpointSaver] = None,
+):
+    """Compile the create_agent graph. Pass a checkpointer to run it standalone;
+    omit it under `langgraph dev` / LangGraph server, which provides its own."""
+    kwargs: dict = dict(
+        model=model,
+        tools=build_tools(fact_store, stripe),
+        system_prompt=_SYSTEM_PROMPT,
+        middleware=[RefundGuardrail(fact_store, stripe, policy, now=now)],
+    )
+    if checkpointer is not None:
+        kwargs["checkpointer"] = checkpointer
+    return create_agent(**kwargs)
+
+
 class RefundAgent:
     def __init__(
         self,
@@ -47,11 +69,12 @@ class RefundAgent:
     ) -> None:
         self._facts = fact_store
         self._stripe = stripe
-        self._agent = create_agent(
+        self._agent = build_agent(
             model=model,
-            tools=build_tools(fact_store, stripe),
-            system_prompt=_SYSTEM_PROMPT,
-            middleware=[RefundGuardrail(fact_store, stripe, policy, now=now)],
+            fact_store=fact_store,
+            stripe=stripe,
+            policy=policy,
+            now=now,
             checkpointer=checkpointer or InMemorySaver(),
         )
 
@@ -71,7 +94,7 @@ class RefundAgent:
 
     async def chat(self, thread_id: str, message: str) -> dict:
         payload = {"messages": [{"role": "user", "content": message}]}
-        result = await self._agent.ainvoke(payload, self._thread(thread_id))  # type: ignore[call-overload]
+        result = await self._agent.ainvoke(payload, self._thread(thread_id))
         return self._interpret(result)
 
     async def resolve(self, thread_id: str, *, approve: bool) -> dict:
@@ -82,7 +105,7 @@ class RefundAgent:
     def astream(self, thread_id: str, message: str):
         """Token/tool-event stream for the chat endpoint."""
         payload = {"messages": [{"role": "user", "content": message}]}
-        return self._agent.astream(payload, self._thread(thread_id), stream_mode="messages")  # type: ignore[call-overload]
+        return self._agent.astream(payload, self._thread(thread_id), stream_mode="messages")
 
     async def verify(self) -> None:
         await self._facts.verify()

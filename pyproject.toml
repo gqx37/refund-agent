@@ -35,6 +35,8 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "ruff>=0.6.0",
     "mypy>=1.11.0",
+    "langgraph-cli[inmem]>=0.2.0",  # `langgraph dev` local server + Studio
+    "cryptography<44",  # pin to a version with prebuilt wheels (older macOS has no Rust)
 ]
 
 [tool.hatch.build.targets.wheel]
