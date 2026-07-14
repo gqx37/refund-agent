@@ -56,7 +56,7 @@ async def health_readiness(response: Response) -> dict:
         return {"status": "ok"}
     except Exception as exc:  # noqa: BLE001 - readiness reports, doesn't raise
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        return {"status": "error", "neo4j": str(exc)}
+        return {"status": "error", "store": str(exc)}
 
 
 @app.post("/v1/chat")

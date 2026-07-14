@@ -1,9 +1,11 @@
-# Fly.io config for the refund-agent service.
-# Deploy from the repo root: flyctl deploy
+# Fly.io config for the refund-agent service — one small machine, everything in
+# process (SQLite fact store on a tiny volume). Deploy from the repo root:
+#   flyctl deploy
 #
 # Secrets (set once, not in this file):
-#   flyctl secrets set FIREWORKS_API_KEY=… STRIPE_API_KEY=… \
-#                      NEO4J_PASSWORD=… NEO4J_URI=bolt://refund-agent-neo4j.internal:7687
+#   flyctl secrets set FIREWORKS_API_KEY=… STRIPE_API_KEY=…
+# Then seed the store on the machine (creates real Stripe test charges):
+#   flyctl ssh console -C "python -m scripts.seed"
 
 app            = "refund-agent"
 primary_region = "iad"
@@ -11,20 +13,19 @@ primary_region = "iad"
 [build]
   dockerfile = "Dockerfile"
 
-[deploy]
-  strategy     = "bluegreen"  # boot new machines, health-check, cut over, destroy old
-  wait_timeout = "120s"
-
 [env]
-  ENV                = "production"
-  PORT               = "8080"
-  NEO4J_URI          = "bolt://refund-agent-neo4j.internal:7687"  # 6PN private networking
-  NEO4J_DATABASE     = "neo4j"
+  ENV           = "production"
+  PORT          = "8080"
+  STORE_DB_PATH = "/data/refund_agent.db"
+
+[mounts]
+  source      = "refund_data"
+  destination = "/data"
 
 [http_service]
   internal_port        = 8080
   force_https          = true
-  auto_stop_machines   = "suspend"  # ~$0 idle, sub-second wake; graph state is external
+  auto_stop_machines   = "suspend"  # ~$0 idle; SQLite lives on the volume, survives suspend
   auto_start_machines  = true
   min_machines_running = 0
 
@@ -33,8 +34,6 @@ primary_region = "iad"
     soft_limit = 40
     hard_limit = 80
 
-  # Readiness gates routing (touches Neo4j); liveness stays with the container
-  # healthcheck. A failing readiness check stops routing, it does not restart.
   [[http_service.checks]]
     grace_period = "10s"
     interval     = "15s"

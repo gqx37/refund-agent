@@ -5,11 +5,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class LLMConfig(BaseSettings):
-    """Nemotron 3 Ultra on Fireworks. temperature 0: the model extracts and phrases,
-    it does not decide, so there's no variance worth buying."""
+    """The reasoning model, on Fireworks. Kimi K2.6 — strong at agentic tool use.
+    temperature 0: the model reasons and phrases; the guardrail decides."""
 
     model_config = SettingsConfigDict(env_prefix="FIREWORKS_", env_file=".env", extra="ignore")
 
     api_key: str = Field(..., description="FIREWORKS_API_KEY.")
-    model: str = "accounts/fireworks/models/nemotron-3-ultra-nvfp4"
+    model: str = "accounts/fireworks/models/kimi-k2p6"
     temperature: float = 0.0

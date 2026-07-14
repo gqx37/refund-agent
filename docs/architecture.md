@@ -9,8 +9,9 @@ as middleware. Two ideas:
   but the moments that matter (moving money) pass through rigid, deterministic
   business logic. Here that logic is `app/policy.py`, enforced by a `wrap_tool_call`
   middleware at the instant `issue_refund` is called.
-- **Nemotron + harness.** A near-frontier open model becomes useful when you wrap
-  it in tools, grounding, and guardrails. The model drives; the harness constrains.
+- **Model + harness.** A capable open model (Kimi K2.6 on Fireworks) becomes useful
+  when you wrap it in tools, grounding, and guardrails. The model drives; the harness
+  constrains.
 
 ## Components
 
@@ -36,18 +37,20 @@ as middleware. Two ideas:
 ## Why the guardrail re-verifies
 
 The guardrail does not trust the context the model gathered. When `issue_refund` is
-called it independently reads the order and customer history from Neo4j and the
+called it independently reads the order and customer history from SQLite and the
 charge from Stripe, then runs the policy against *those* facts. The model can be
 wrong, confused, or adversarially prompted; the deterministic gate still holds.
 
 Money truth is Stripe's, never the graph's; the rules are code's, never the model's;
 the facts are the graph's, never the policy's.
 
-## Fixed lookups vs Text2Cypher
+## Why SQLite, not a graph
 
-The lookups the decision needs are parameterized Cypher on `GraphStore`. You don't
-ask an LLM to regenerate a query whose shape you already know — it adds latency,
-cost, and an injection surface for nothing. See `design-note-neo4j-vs-code.md`.
+The fact lookups are relational — order → charge → customer, and a self-join over a
+shared payment-method fingerprint for linked accounts. That's what SQL is for.
+Embedded SQLite keeps the whole agent in one process (one small machine, no DB
+service to operate); a graph database here would be over-engineering. See
+`design-note-neo4j-vs-code.md`, which makes the same argument.
 
 ## Reliability
 
@@ -56,8 +59,7 @@ cost, and an injection surface for nothing. See `design-note-neo4j-vs-code.md`.
 - **Version pin**: the Stripe client sends a pinned `Stripe-Version`.
 - **Typed errors**: provider errors become a `StripeError` carrying Stripe's
   type/code/param/message.
-- **Health split**: liveness is dependency-free; readiness returns 503 if Neo4j is
-  unreachable.
+- **Health split**: liveness is dependency-free; readiness checks the fact store.
 
 ## Testability
 

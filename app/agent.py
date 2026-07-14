@@ -18,7 +18,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 from app.guardrail import RefundGuardrail
-from app.integrations.graph import GraphStore
+from app.integrations.store import SqliteFactStore
 from app.integrations.stripe import StripeClient
 from app.policy import RefundPolicy
 from app.tools import build_tools
@@ -82,11 +82,11 @@ class RefundAgent:
     def production(cls, policy: Optional[RefundPolicy] = None) -> "RefundAgent":
         from langchain_fireworks import ChatFireworks
 
-        from app.configs import LLMConfig, Neo4jConfig, StripeConfig
+        from app.configs import LLMConfig, StoreConfig, StripeConfig
 
         cfg = LLMConfig()
         return cls(
-            fact_store=GraphStore(Neo4jConfig()),
+            fact_store=SqliteFactStore(StoreConfig().db_path),
             stripe=StripeClient(StripeConfig()),
             policy=policy or RefundPolicy(),
             model=ChatFireworks(model=cfg.model, temperature=cfg.temperature, api_key=cfg.api_key),  # type: ignore[call-arg]
