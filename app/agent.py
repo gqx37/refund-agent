@@ -141,10 +141,14 @@ class RefundAgent:
                         name = tool_names.get(m.tool_call_id) or getattr(m, "name", None)
                         guardrail = None
                         # Identify the refund outcome by content too: on a resume turn
-                        # the originating tool_call wasn't seen in this stream.
+                        # the originating tool_call wasn't seen in this stream. Only a
+                        # real "Refunded ..." is approve; a Stripe error stays neutral.
                         if name == "issue_refund" or content.startswith(("Refunded ", "Refund not issued")):
                             name = "issue_refund"
-                            guardrail = "deny" if content.startswith("Refund not issued") else "approve"
+                            if content.startswith("Refunded "):
+                                guardrail = "approve"
+                            elif content.startswith("Refund not issued"):
+                                guardrail = "deny"
                         yield {"type": "tool_result", "name": name, "guardrail": guardrail}
         yield {"type": "done"}
 

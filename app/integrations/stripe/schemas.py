@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Dict, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class RefundReason(str, Enum):
@@ -57,6 +57,18 @@ class RefundCreateParams(BaseModel):
     amount: Optional[int] = Field(None, ge=1, description="Cents; omit to refund the full remainder.")
     reason: Optional[RefundReason] = None
     metadata: Optional[Dict[str, str]] = None
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def _coerce_reason(cls, value: object) -> Optional[RefundReason]:
+        # The model often passes the customer's own words ("it arrived broken").
+        # Stripe only accepts three reasons, so anything else becomes no reason.
+        if value is None or isinstance(value, RefundReason):
+            return value
+        try:
+            return RefundReason(value)
+        except ValueError:
+            return None
 
     @model_validator(mode="after")
     def _one_target(self) -> "RefundCreateParams":

@@ -55,6 +55,12 @@ async def test_refund_is_idempotent(stripe_client):
     assert charge.amount_refunded == 500  # applied once, not twice
 
 
+def test_free_text_reason_is_coerced_to_none():
+    # The model passes the customer's words; Stripe only accepts three reasons.
+    assert RefundCreateParams(charge="ch_1", reason="it arrived broken").reason is None
+    assert RefundCreateParams(charge="ch_1", reason="requested_by_customer").reason.value == "requested_by_customer"
+
+
 def test_refund_requires_exactly_one_target():
     with pytest.raises(ValueError):
         RefundCreateParams(charge="ch_1", payment_intent="pi_1")
