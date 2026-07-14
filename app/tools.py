@@ -24,17 +24,20 @@ def _charge_state(charge: Charge) -> str:
     return "refundable"
 
 
-async def _order_lines(fact_store: Any, stripe: StripeClient, orders: list) -> list[str]:
-    """Render orders with their live Stripe state, fetched concurrently."""
+async def _order_lines(
+    fact_store: Any, stripe: StripeClient, orders: list, *, with_customer: bool = False
+) -> list[str]:
+    """Render orders with their live Stripe state, fetched concurrently. Set
+    with_customer to name the customer on each line (for a flat, ungrouped list)."""
     charges = await asyncio.gather(
         *(stripe.retrieve_charge(o.charge_id) for o in orders), return_exceptions=True
     )
     lines = []
     for order, charge in zip(orders, charges):
-        if isinstance(charge, BaseException):
-            lines.append(f"- {order.order_id}: {order.order_total_cents} cents, state unavailable")
-        else:
-            lines.append(f"- {order.order_id}: {charge.amount} cents, {_charge_state(charge)}")
+        who = f" ({order.customer_name})" if with_customer and order.customer_name else ""
+        amount = charge.amount if not isinstance(charge, BaseException) else order.order_total_cents
+        state = "state unavailable" if isinstance(charge, BaseException) else _charge_state(charge)
+        lines.append(f"- {order.order_id}{who}: {amount} cents, {state}")
     return lines
 
 
@@ -63,7 +66,7 @@ def build_tools(fact_store: Any, stripe: StripeClient) -> list:
         orders = await fact_store.all_orders()
         if not orders:
             return "There are no orders on record."
-        return "\n".join(await _order_lines(fact_store, stripe, orders))
+        return "\n".join(await _order_lines(fact_store, stripe, orders, with_customer=True))
 
     @tool
     async def order_lookup(order_id: str) -> str:

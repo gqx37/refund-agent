@@ -19,9 +19,9 @@ async def test_find_customer_no_match(tools):
 
 async def test_list_orders_shows_each_state(tools):
     text = await tools["list_orders"].ainvoke({})
-    assert f"- {ORDER_CLEAN}:" in text and "refundable" in text
-    assert f"- {ORDER_FULLY_REFUNDED}:" in text and "fully refunded" in text
-    assert f"- {ORDER_DISPUTED}:" in text and "disputed" in text
+    assert f"- {ORDER_CLEAN} (Alice Nguyen):" in text and "refundable" in text
+    assert f"- {ORDER_FULLY_REFUNDED} " in text and "fully refunded" in text
+    assert f"- {ORDER_DISPUTED} " in text and "disputed" in text
 
 
 async def test_order_lookup_summarizes_the_order(tools):
