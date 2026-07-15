@@ -121,7 +121,11 @@ class RefundAgent:
         payload: Any = Command(resume=message) if state.next else {"messages": [{"role": "user", "content": message}]}
 
         tool_names: dict[str, str] = {}
-        async for mode, data in self._agent.astream(payload, config, stream_mode=["updates", "messages"]):
+        async for mode, data in self._agent.astream(payload, config, stream_mode=["updates", "messages", "custom"]):
+            if mode == "custom":
+                if isinstance(data, dict) and "policy" in data:
+                    yield {"type": "policy", **data["policy"]}
+                continue
             if mode == "messages":
                 chunk, _meta = data
                 if isinstance(chunk, AIMessageChunk) and isinstance(chunk.content, str) and chunk.content:

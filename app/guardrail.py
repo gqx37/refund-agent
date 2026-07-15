@@ -19,6 +19,7 @@ from typing import Any, Optional
 from langchain.agents.middleware import AgentMiddleware
 from langchain.messages import ToolMessage
 from langchain.tools.tool_node import ToolCallRequest
+from langgraph.config import get_stream_writer
 from langgraph.types import Command, interrupt
 
 from app.facts import gather_facts
@@ -63,6 +64,7 @@ class RefundGuardrail(AgentMiddleware):
             self._policy,
             now=self._now,
         )
+        _emit_policy(order_id, decision, facts.charge.remaining_refundable_cents)
 
         if decision.outcome is Outcome.APPROVE:
             return await handler(request)
@@ -98,6 +100,23 @@ def _approved(review: Any) -> bool:
             return _approved(review["approve"])
         review = review.get("decision") or review.get("action") or review.get("response") or ""
     return str(review).strip().lower() in _APPROVE_WORDS
+
+
+def _emit_policy(order_id: str, decision: Any, remaining_cents: int) -> None:
+    """Surface the deterministic policy decision on the custom stream channel, so
+    the UI can show the guardrail's verdict and the rules that fired. A no-op when
+    not streaming (e.g. under ainvoke or in tests)."""
+    try:
+        writer = get_stream_writer()
+        if writer is not None:
+            writer({"policy": {
+                "order_id": order_id,
+                "outcome": decision.outcome.value,
+                "reasons": decision.reasons,
+                "amount_cents": decision.approved_amount_cents or remaining_cents,
+            }})
+    except Exception:  # noqa: BLE001 - telemetry only; never break the refund path
+        pass
 
 
 def _coerce_reason(value: Any) -> Optional[RefundReason]:
