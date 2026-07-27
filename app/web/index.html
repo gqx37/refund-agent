@@ -314,6 +314,7 @@ async function submit(){
   const turn = newAssistant();
   try {
     const res = await fetch("/v1/stream", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ message:text, thread_id: threadId }) });
+    if(!res.ok){ const j = await res.json().catch(()=>({})); turn.fill(j.detail || "The demo is unavailable right now. Please try again."); return; }
     const reader = res.body.getReader(); const dec = new TextDecoder(); let buf="";
     while(true){
       const { value, done } = await reader.read(); if(done) break;

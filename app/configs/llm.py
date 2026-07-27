@@ -13,3 +13,6 @@ class LLMConfig(BaseSettings):
     api_key: str = Field(..., description="FIREWORKS_API_KEY.")
     model: str = "accounts/fireworks/models/kimi-k2p6"
     temperature: float = 0.0
+    # A refund reply is a few sentences. Capping output bounds what one turn can
+    # cost, and a model that wants more than this has lost the plot anyway.
+    max_tokens: int = 1024

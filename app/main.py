@@ -12,12 +12,13 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Response, status
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request, Response, status
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.agent import RefundAgent
 from app.configs import runtime_config
+from app.limits import Limits, Rejection, client_key
 from app.logging import configure, get_logger
 
 load_dotenv()
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI):
     cfg = runtime_config()
     configure(is_production=cfg.is_production)
     app.state.agent = RefundAgent.production()
+    app.state.limits = Limits()
     log.info("startup", env=cfg.env)
     try:
         yield
@@ -69,9 +71,30 @@ async def health_readiness(response: Response) -> dict:
         return {"status": "error", "store": str(exc)}
 
 
+def _rejection(request: Request, thread_id: str, message: str = "") -> Optional[Rejection]:
+    """Every LLM-spending endpoint goes through here. Public URL, paid model."""
+    client = client_key(request.headers, request.client.host if request.client else None)
+    rejected = app.state.limits.check(client=client, thread_id=thread_id, message=message)
+    if rejected:
+        log.info("rate_limited", thread_id=thread_id, status=rejected.status)
+    return rejected
+
+
+def _headers(rejected: Rejection) -> dict[str, str]:
+    return {"Retry-After": str(rejected.retry_after)} if rejected.retry_after else {}
+
+
 @app.post("/v1/stream")
-async def stream(body: ChatBody) -> StreamingResponse:
+async def stream(request: Request, body: ChatBody) -> Response:
     thread_id = body.thread_id or f"thread_{uuid.uuid4().hex[:16]}"
+
+    rejected = _rejection(request, thread_id, body.message)
+    if rejected:
+        return JSONResponse(
+            {"detail": rejected.message},
+            status_code=rejected.status,
+            headers=_headers(rejected),
+        )
 
     async def events() -> AsyncIterator[bytes]:
         yield _sse({"type": "thread", "thread_id": thread_id})
@@ -90,15 +113,24 @@ def _sse(obj: dict) -> bytes:
 
 
 @app.post("/v1/chat")
-async def chat(body: ChatBody) -> dict:
+async def chat(request: Request, body: ChatBody) -> dict:
     thread_id = body.thread_id or f"thread_{uuid.uuid4().hex[:16]}"
+
+    rejected = _rejection(request, thread_id, body.message)
+    if rejected:
+        raise HTTPException(rejected.status, rejected.message, headers=_headers(rejected))
+
     result = await app.state.agent.chat(thread_id, body.message)
     log.info("chat", thread_id=thread_id, status=result["status"])
     return {"thread_id": thread_id, **result}
 
 
 @app.post("/v1/chat/{thread_id}/resume")
-async def resume(thread_id: str, body: ResolveBody) -> dict:
+async def resume(request: Request, thread_id: str, body: ResolveBody) -> dict:
+    rejected = _rejection(request, thread_id)
+    if rejected:
+        raise HTTPException(rejected.status, rejected.message, headers=_headers(rejected))
+
     result = await app.state.agent.resolve(thread_id, approve=body.approve)
     log.info("resume", thread_id=thread_id, approve=body.approve, status=result["status"])
     return {"thread_id": thread_id, **result}

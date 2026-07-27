@@ -99,7 +99,12 @@ class RefundAgent:
             fact_store=SqliteFactStore(StoreConfig().db_path),
             stripe=StripeClient(StripeConfig()),
             policy=policy or RefundPolicy(),
-            model=ChatFireworks(model=cfg.model, temperature=cfg.temperature, api_key=cfg.api_key),  # type: ignore[call-arg]
+            model=ChatFireworks(  # type: ignore[call-arg]
+                model=cfg.model,
+                temperature=cfg.temperature,
+                max_tokens=cfg.max_tokens,
+                api_key=cfg.api_key,
+            ),
         )
 
     async def chat(self, thread_id: str, message: str) -> dict:

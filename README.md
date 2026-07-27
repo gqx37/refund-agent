@@ -30,6 +30,10 @@ itself, not on whatever the model passed into the tool call.
 The policy is a pure function in `app/policy.py`: refund window, amount ceiling, no
 double refunds, disputed orders blocked, high fraud rate escalates.
 
+The demo URL is public and the model isn't free, so `app/limits.py` bounds it: a token
+bucket per client IP, a cap on message size, and a cap on turns per thread, since each
+turn re-sends the whole history. It's one machine, so the buckets are in-process.
+
 Orders and customers are in SQLite, in-process. `docs/design-note-neo4j-vs-code.md` has
 the note on why I dropped Neo4j for it. The model is Kimi K2.6 on Fireworks. It deploys
 as one Fly machine running FastAPI for both the API and the UI.
