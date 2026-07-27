@@ -1,0 +1,26 @@
+# The suite runs on fakes (scripted model, fake Stripe transport, in-memory
+# store), so CI needs no secrets and no services.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -e '.[dev]'
+
+      - run: ruff check app tests scripts
+      - run: mypy app
+      - run: pytest -q

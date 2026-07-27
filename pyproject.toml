@@ -32,8 +32,10 @@ dependencies = [
 dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
-    "ruff>=0.6.0",
-    "mypy>=1.11.0",
+    # Pinned exactly: a linter is a gate, and an unpinned gate means a release on
+    # someone else's schedule turns CI red on code that didn't change.
+    "ruff==0.15.21",
+    "mypy==2.3.0",
     "langgraph-cli[inmem]>=0.2.0",  # `langgraph dev` local server + Studio
     "cryptography<44",  # pin to a version with prebuilt wheels (older macOS has no Rust)
 ]
