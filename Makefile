@@ -13,7 +13,7 @@ typecheck:
 	mypy app
 
 seed:
-	python -m scripts.seed_graph
+	python -m scripts.seed
 
 serve:
 	uvicorn app.main:app --reload --port 8080

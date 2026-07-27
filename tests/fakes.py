@@ -25,8 +25,8 @@ class ScriptedModel(FakeMessagesListChatModel):
         return self
 
 
-class InMemoryGraphStore:
-    """Mirrors GraphStore's Cypher against the sample fixtures."""
+class InMemoryFactStore:
+    """Mirrors SqliteFactStore against the sample fixtures, in memory."""
 
     def __init__(self, *, now: Optional[datetime] = None) -> None:
         self._now = now or datetime.now(timezone.utc)

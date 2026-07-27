@@ -17,7 +17,7 @@ from app.sample_data import (
     ORDER_SERIAL_REFUNDER,
     ORDERS,
 )
-from tests.fakes import InMemoryGraphStore
+from tests.fakes import InMemoryFactStore
 
 NOW = datetime(2026, 7, 14, tzinfo=timezone.utc)
 
@@ -49,7 +49,7 @@ def store(tmp_path) -> SqliteFactStore:
 
 
 async def test_order_facts_match_the_fake(store):
-    mem = InMemoryGraphStore(now=NOW)
+    mem = InMemoryFactStore(now=NOW)
     sql_o = await store.order_facts(ORDER_CLEAN)
     mem_o = await mem.order_facts(ORDER_CLEAN)
     assert (sql_o.customer_id, sql_o.charge_id, sql_o.order_total_cents) == (

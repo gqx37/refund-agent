@@ -14,7 +14,7 @@ from app.configs import StripeConfig
 from app.integrations.stripe import StripeClient
 from app.policy import RefundPolicy
 from app.sample_data import ORDER_CLEAN, ORDER_DISPUTED, ORDERS
-from tests.fakes import FakeStripe, InMemoryGraphStore, ScriptedModel
+from tests.fakes import FakeStripe, InMemoryFactStore, ScriptedModel
 
 NOW = datetime(2026, 7, 14, tzinfo=timezone.utc)
 CLEAN_CHARGE = next(o.charge_id for o in ORDERS if o.order_id == ORDER_CLEAN)
@@ -31,7 +31,7 @@ def stripe_client() -> StripeClient:
 
 def _agent(stripe_client: StripeClient, script: list) -> RefundAgent:
     return RefundAgent(
-        fact_store=InMemoryGraphStore(now=NOW),
+        fact_store=InMemoryFactStore(now=NOW),
         stripe=stripe_client,
         policy=RefundPolicy(),
         model=ScriptedModel(responses=script),

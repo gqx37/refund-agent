@@ -12,7 +12,7 @@ from app.guardrail import RefundGuardrail
 from app.integrations.stripe import StripeClient
 from app.policy import RefundPolicy
 from app.tools import build_tools
-from tests.fakes import FakeStripe, InMemoryGraphStore
+from tests.fakes import FakeStripe, InMemoryFactStore
 
 
 @pytest.fixture
@@ -26,8 +26,8 @@ def stripe_client() -> StripeClient:
 
 
 @pytest.fixture
-def fact_store(now: datetime) -> InMemoryGraphStore:
-    return InMemoryGraphStore(now=now)
+def fact_store(now: datetime) -> InMemoryFactStore:
+    return InMemoryFactStore(now=now)
 
 
 @pytest.fixture
