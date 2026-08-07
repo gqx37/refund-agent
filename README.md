@@ -1,6 +1,8 @@
 # Refund agent
 
-Live: **https://refund-agent.fly.dev**
+Live: **https://refund-agent.vercel.app** <!-- TODO: replace with the real Vercel URL after the first deploy -->
+
+The agent's API is at `refund-agent.fly.dev`, but it only answers the UI (see Deployment).
 
 An agent that issues Stripe refunds. The policy check runs as middleware around the
 refund tool, so the model can handle the conversation however it wants but can't move
@@ -35,8 +37,38 @@ bucket per client IP, a cap on message size, and a cap on turns per thread, sinc
 turn re-sends the whole history. It's one machine, so the buckets are in-process.
 
 Orders and customers are in SQLite, in-process. `docs/design-note-neo4j-vs-code.md` has
-the note on why I dropped Neo4j for it. The model is Kimi K2.6 on Fireworks. It deploys
-as one Fly machine running FastAPI for both the API and the UI.
+the note on why I dropped Neo4j for it. The model is Kimi K2.6 on Fireworks.
+
+## Deployment
+
+Two pieces. The UI is a static Next.js page on Vercel, so it comes off the CDN and paints
+instantly. The agent is one Fly machine running FastAPI.
+
+The machine idles suspended to keep the demo near free, which means the first request after
+a deploy pays a full cold boot — Fly discards the suspend snapshot on deploy. Two things
+cover that: the page pings `/api/warm` the moment it paints, so the machine is booting
+while you read the suggestions, and if it's still waking when you send, the composer says
+so instead of blinking at nothing.
+
+The browser never talks to Fly and holds no credential. It calls same-origin `/api/*` on
+Vercel, and that Route Handler attaches `PROXY_SHARED_SECRET` server-side and forwards.
+`/v1` rejects anything without it, so the Fly URL is inert on its own and the demo can't be
+scripted around the UI. `/health` stays open — Fly's load balancer polls it.
+
+That proxy has one non-obvious consequence: every request now reaches Fly from a Vercel
+address, so `Fly-Client-IP` is useless for rate limiting and all visitors would share one
+token bucket. The proxy forwards the real address in `X-Demo-Client-IP`, and `client_key`
+believes it only when the shared secret authenticated that hop.
+
+```bash
+# agent
+flyctl secrets set FIREWORKS_API_KEY=… STRIPE_API_KEY=… PROXY_SHARED_SECRET="$(openssl rand -hex 32)"
+flyctl deploy
+
+# UI — Vercel project root is web/
+# set BACKEND_URL and the same PROXY_SHARED_SECRET in the project's env vars
+cd web && npm install && npx vercel deploy --prod
+```
 
 ## Tests
 
@@ -70,8 +102,13 @@ app/
   policy.py         the rules, as a pure function
   tools.py          find_customer, list_orders, order_lookup, issue_refund
   facts.py          reads the store + Stripe
-  main.py           FastAPI: /v1/chat, /v1/chat/{id}/resume, /health
+  main.py           FastAPI: /v1/chat, /v1/chat/{id}/resume, /health, the /v1 gate
+  limits.py         token bucket, message cap, turns per thread
   integrations/     stripe/, store.py
+web/                the UI, on Vercel
+  app/page.tsx      static shell — no hydration, ships from the CDN
+  app/api/          the authenticated streaming proxy
+  public/chat.js    the chat surface
 scripts/seed.py
 tests/
 ```

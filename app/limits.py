@@ -136,8 +136,28 @@ class Limits:
         return None
 
 
-def client_key(headers: Mapping[str, str], peer: Optional[str]) -> str:
-    """Fly terminates TLS and forwards the caller's address, so the socket peer is
-    the proxy. Trust Fly-Client-IP, then the first hop of X-Forwarded-For."""
+def client_key(
+    headers: Mapping[str, str],
+    peer: Optional[str],
+    *,
+    trusted_proxy: bool = False,
+    forwarded_header: str = "x-demo-client-ip",
+) -> str:
+    """Who to bill this request to.
+
+    Fly terminates TLS and forwards the caller's address, so the socket peer is
+    the edge. Trust Fly-Client-IP, then the first hop of X-Forwarded-For.
+
+    When the UI proxies through its own server, all three of those become the
+    *proxy's* address — every visitor on earth would collapse into one bucket and
+    the demo would rate-limit itself into a brick. So a proxied request carries
+    the real client address in its own header, which we believe only because
+    `trusted_proxy` means the shared secret authenticated the hop that set it.
+    An unauthenticated caller can set the same header and it is ignored.
+    """
+    if trusted_proxy:
+        proxied = headers.get(forwarded_header, "").split(",")[0].strip()
+        if proxied:
+            return proxied
     forwarded = headers.get("x-forwarded-for", "").split(",")[0].strip()
     return headers.get("fly-client-ip") or forwarded or peer or "unknown"
